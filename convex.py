@@ -437,7 +437,7 @@ with open(identifier_predicates_path, "r") as data:
 
 if __name__ == '__main__':
 	start_time = time.time()
-	if telegram_active: telegram.send_message("Starting: " + str((domain, number_of_frontier_nodes, hyperparameters, conversations_path, wikidata_dump_path)), telegram_chat_id)
+	if telegram_active: telegram.send_message("Starting benchmarking: " + str((domain, number_of_frontier_nodes, hyperparameters, conversations_path, wikidata_dump_path)), telegram_chat_id)
 
 	# open the conversations
 	with open(conversations_path, "r") as data:
@@ -475,7 +475,7 @@ if __name__ == '__main__':
 		spacy.save_cached_data()
 	
 	if telegram_active:
-		telegram.send_message("Done: " 		  + str((domain, elapsed_time, number_of_frontier_nodes, hyperparameters, conversations_path, wikidata_dump_path)), telegram_chat_id)
+		telegram.send_message("Done benchmarking: " + str((domain, elapsed_time, number_of_frontier_nodes, hyperparameters, conversations_path, wikidata_dump_path)), telegram_chat_id)
 		telegram.send_message("MRR_score: 	" + str((question_counter, (total_mrr_score/float(question_counter)), total_mrr_score)), telegram_chat_id)
 		telegram.send_message("P@1: 		" + str((question_counter, (total_precision_at_1_score/float(question_counter)), total_precision_at_1_score)), telegram_chat_id)
 		telegram.send_message("H@5: 		" + str((question_counter, (total_hit_at_5_score/float(question_counter)), total_hit_at_5_score)), telegram_chat_id)
