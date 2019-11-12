@@ -1,0 +1,3 @@
+[submodule "modules/CONVEX"]
+	path = modules/CONVEX
+	url = git@github.com:RomainClaret/CONVEX.git
