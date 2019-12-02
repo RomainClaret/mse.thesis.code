@@ -1,5 +1,11 @@
 # Project related
-data/*
+data/convex/cache/*
+data/convex/dev_set/*
+data/convex/test_set/*
+data/convex/train_set/*
+data/convex/identifier_predicates.json
+data/convex/stopwords.txt
+data/kb
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,3 +1,9 @@
 [submodule "modules/CONVEX"]
 	path = modules/CONVEX
 	url = git@github.com:RomainClaret/CONVEX.git
+[submodule "modules/pywikibot"]
+	path = modules/pywikibot
+	url = https://gerrit.wikimedia.org/r/pywikibot/core.git
+[submodule "modules/nlquery"]
+	path = modules/nlquery
+	url = git@github.com:ayoungprogrammer/nlquery.git

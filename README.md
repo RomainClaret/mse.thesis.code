@@ -14,9 +14,9 @@ This component is a question answering chatbot.
  conda/pip install spacy requests pybind11 hdt networkx
  ```
 - Install the spacy model: 
-    ```shell
-    python -m spacy download en_vectors_web_lg
-    ```
+  ```shell
+  python -m spacy download en_vectors_web_lg
+  ```
 - Get the submodules
  ```shell
  git submodule init
