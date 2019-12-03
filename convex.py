@@ -336,6 +336,7 @@ def hit_at_5(answers, golden_answers):
 
 # answer the given question
 def answer_complete_question(question, tagmeToken):
+	result = {'context': False, 'answers': [{'answer': False, 'rank': 1}] }
 	entities = tagme_get_all_entities(question, tagmeToken) 
 	highest_matching_similarity = -1
 	for entity in entities:
