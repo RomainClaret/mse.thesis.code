@@ -576,13 +576,13 @@ def get_node_predicate_similarity_from_path(paths, predicates):
 
 
 # TODO: make the predicate search go further in the path list for the !i%2
+# change return path_answer, best_path[0][2] to return (path_answer, best_path[0][2])
 def find_anwser_from_graph(graph, q_nlp, themes, predicates):
     initial_paths = find_paths_for_themes(graph, themes)
     predicate_id_similarities = get_node_predicate_similarity_from_path(initial_paths, predicates)
     best_path = [p for p in initial_paths if predicate_id_similarities[0][0] == p[1][:p[1].find("-")]]
     path_answer = get_wd_label(best_path[0][2]) if best_path else []
-    
-    return path_answer, best_path[0][2] if path_answer else (False, False)
+    return (path_answer, best_path[0][2]) if path_answer else (False, False)
 
 #find_anwser_from_graph(graph, q0_nlp, q0_themes, q0_predicates)
 

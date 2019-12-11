@@ -78,7 +78,8 @@ def tagme_get_all_entities(utterance, tagmeToken):
 		except:
 			print("Error: Did you put your tagMe_token in the settings file?")
 			print(utterance)
-			time.sleep(5)
+			return []
+			#time.sleep(5)
 	entities = []
 	for result in results["annotations"]:
 		try:
