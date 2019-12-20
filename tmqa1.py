@@ -43,7 +43,7 @@ nlp = spacy.load("/data/users/romain.claret/tm/wiki-kb-linked-entities/nlp_custo
 
 
 # load settings
-with open( "settings-tm2.json", "r") as settings_data:
+with open( "settings-tmqa-1.json", "r") as settings_data:
     settings = json.load(settings_data)
     use_cache = settings['use_cache']
     save_cache = settings['save_cache']
