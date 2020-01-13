@@ -5,6 +5,7 @@
 
 
 get_ipython().run_line_magic('autosave', '180')
+get_ipython().run_line_magic('matplotlib', 'inline')
 
 
 # In[2]:
@@ -13,7 +14,7 @@ get_ipython().run_line_magic('autosave', '180')
 #import convex as cx
 import requests
 import time
-import itertools
+import itertools as it
 import re
 #import numpy
 from copy import copy
@@ -28,8 +29,9 @@ import networkx as nx
 from math import sqrt
 import spacy
 from hdt import HDTDocument
+import multiprocessing as mp
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "1,0"
+os.environ['CUDA_VISIBLE_DEVICES'] = "1,2"
 from deepcorrect import DeepCorrect
 
 #import deepcorrect
@@ -61,7 +63,7 @@ nlp = spacy.load("/data/users/romain.claret/tm/wiki-kb-linked-entities/nlp_custo
 
 
 # load settings
-with open( "settings-tmqa-1.json", "r") as settings_data:
+with open( "settings-graphqa.json", "r") as settings_data:
     settings = json.load(settings_data)
     use_cache = settings['use_cache']
     save_cache = settings['save_cache']
@@ -72,47 +74,68 @@ with open( "settings-tmqa-1.json", "r") as settings_data:
 # In[7]:
 
 
+save_cache = True
 def save_cache_data():
     if save_cache:
-        with open(os.path.join(cache_path,'statements_dict.json'), 'wb') as outfile:
-            outfile.write(json.dumps(statements_dict, separators=(',',':')).encode('utf8'))
+        with open(os.path.join(cache_path,'wd_local_statements_dict.json'), 'wb') as outfile:
+            outfile.write(json.dumps(wd_local_statements_dict, separators=(',',':')).encode('utf8'))
         with open(os.path.join(cache_path,'wd_labels_dict.json'), 'wb') as outfile:
             outfile.write(json.dumps(wd_labels_dict, separators=(',',':')).encode('utf8'))
-        with open(os.path.join(cache_path,'wd_word_ids_dict.json'), 'wb') as outfile:
-            outfile.write(json.dumps(wd_word_ids_dict, separators=(',',':')).encode('utf8'))
-        with open(os.path.join(cache_path,'wd_predicate_ids_dict.json'), 'wb') as outfile:
-            outfile.write(json.dumps(wd_predicate_ids_dict, separators=(',',':')).encode('utf8'))
+        with open(os.path.join(cache_path,'wd_local_word_ids_dict.json'), 'wb') as outfile:
+            outfile.write(json.dumps(wd_local_word_ids_dict, separators=(',',':')).encode('utf8'))
+        with open(os.path.join(cache_path,'wd_online_word_ids_dict.json'), 'wb') as outfile:
+            outfile.write(json.dumps(wd_online_word_ids_dict, separators=(',',':')).encode('utf8'))
+        with open(os.path.join(cache_path,'wd_local_predicate_ids_dict.json'), 'wb') as outfile:
+            outfile.write(json.dumps(wd_local_predicate_ids_dict, separators=(',',':')).encode('utf8'))
+        with open(os.path.join(cache_path,'wd_online_predicate_ids_dict.json'), 'wb') as outfile:
+            outfile.write(json.dumps(wd_online_predicate_ids_dict, separators=(',',':')).encode('utf8'))
+        with open(os.path.join(cache_path,'word_similarities_dict.json'), 'wb') as outfile:
+            outfile.write(json.dumps(word_similarities_dict, separators=(',',':')).encode('utf8'))
 
 
 # In[8]:
 
 
 # Load statements cache
-use_cache = False
+use_cache = True
 if use_cache:
-    path_statements_dict = "statements_dict.json"
+    path_wd_local_statements_dict = "wd_local_statements_dict.json"
     path_wd_labels_dict = 'wd_labels_dict.json'
-    path_wd_word_ids_dict = 'wd_word_ids_dict.json'
-    path_wd_predicate_ids_dict = 'wd_predicate_ids_dict.json'
+    path_wd_local_word_ids_dict = 'wd_local_word_ids_dict.json'
+    path_wd_online_word_ids_dict = 'wd_online_word_ids_dict.json'
+    path_wd_local_predicate_ids_dict = 'wd_local_predicate_ids_dict.json'
+    path_wd_online_predicate_ids_dict = 'wd_online_predicate_ids_dict.json'
+    path_word_similarities_dict = 'word_similarities_dict.json'
 else:
-    path_statements_dict = "statements_dict_empty.json"
+    path_wd_local_statements_dict = "wd_local_statements_dict_empty.json"
     path_wd_labels_dict = 'wd_labels_dict_empty.json'
-    path_wd_word_ids_dict = 'wd_word_ids_dict_empty.json'
-    path_wd_predicate_ids_dict = 'wd_predicate_ids_dict_empty.json'
+    path_wd_local_word_ids_dict = 'wd_local_word_ids_dict_empty.json'
+    path_wd_online_word_ids_dict = 'wd_online_word_ids_dict_empty.json'
+    path_wd_local_predicate_ids_dict = 'wd_local_predicate_ids_dict_empty.json'
+    path_wd_online_predicate_ids_dict = 'wd_online_predicate_ids_dict_empty.json'
+    path_word_similarities_dict = 'word_similarities_dict_empty.json'
 
-with open(os.path.join(cache_path,path_statements_dict), "rb") as data:
-    statements_dict = json.load(data)
+with open(os.path.join(cache_path,path_wd_local_statements_dict), "rb") as data:
+    wd_local_statements_dict = json.load(data)
 with open(os.path.join(cache_path,path_wd_labels_dict), "rb") as data:
     wd_labels_dict = json.load(data)
-with open(os.path.join(cache_path,path_wd_word_ids_dict), "rb") as data:
-    wd_word_ids_dict = json.load(data)
-with open(os.path.join(cache_path,path_wd_predicate_ids_dict), "rb") as data:
-    wd_predicate_ids_dict = json.load(data)
+with open(os.path.join(cache_path,path_wd_local_word_ids_dict), "rb") as data:
+    wd_local_word_ids_dict = json.load(data)
+with open(os.path.join(cache_path,path_wd_online_word_ids_dict), "rb") as data:
+    wd_online_word_ids_dict = json.load(data)
+with open(os.path.join(cache_path,path_wd_local_predicate_ids_dict), "rb") as data:
+    wd_local_predicate_ids_dict = json.load(data)
+with open(os.path.join(cache_path,path_wd_online_predicate_ids_dict), "rb") as data:
+    wd_online_predicate_ids_dict = json.load(data)
+with open(os.path.join(cache_path,path_word_similarities_dict), "rb") as data:
+    word_similarities_dict = json.load(data)
 
-#print("len(statements_dict)",len(statements_dict))
+#print("len(wd_local_statements_dict)",len(wd_local_statements_dict))
 #print("len(wd_labels_dict)",len(wd_labels_dict))
-#print("len(wd_word_ids_dict)",len(wd_word_ids_dict))
-#print("len(wd_predicate_ids_dict)",len(wd_predicate_ids_dict))
+#print("len(wd_local_word_ids_dict)",len(wd_local_word_ids_dict))
+#print("len(wd_online_word_ids_dict)",len(wd_online_word_ids_dict))
+#print("len(wd_local_predicate_ids_dict)",len(wd_local_word_ids_dict))
+#print("len(wd_online_predicate_ids_dict)",len(wd_online_word_ids_dict))
 
 
 # In[9]:
@@ -142,20 +165,40 @@ def get_kb_ents(text):
 
 
 def get_nlp(sentence, autocorrect=False):
-    #print("sentence",sentence)
+    
+    sentence = sentence.replace("’", "\'")
     nlp_sentence = nlp(sentence)
     nlp_sentence_list = list(nlp_sentence)
     meaningful_punct = []
     
     for i_t, t in enumerate(nlp_sentence_list):
+        #print(t,t.pos_, t.lemma_)
         if t.lemma_ == "year":
             nlp_sentence_list[i_t] = "date"
-        elif t.text == "\'s":
-            if t.pos_ == "VERB" or t.pos_ == "AUX":
+        elif t.text == "\'s" or t.text == "s":
+            if t.lemma_ == "be" or t.lemma_ == "s":
                 nlp_sentence_list[i_t] = "is"
             else: nlp_sentence_list[i_t] = ""
-        elif t.text == "\'re":
-            nlp_sentence_list[i_t] = "are"
+        elif t.text == "\'ve" or t.text == "ve":
+            if t.lemma_ == "have":
+                nlp_sentence_list[i_t] = "have"
+            else: nlp_sentence_list[i_t] = ""
+        elif t.text == "\'re" or t.text == "re":
+            if t.lemma_ == "be":
+                nlp_sentence_list[i_t] = "are"
+            else: nlp_sentence_list[i_t] = ""
+        elif t.text == "\'ll" or t.text == "ll":
+            if t.lemma_ == "will":
+                nlp_sentence_list[i_t] = "will"
+            else: nlp_sentence_list[i_t] = ""
+        elif t.text == "\'d" or t.text == "d":
+            if t.lemma_ == "have":
+                nlp_sentence_list[i_t] = "had"
+            elif t.lemma_ == "would":
+                nlp_sentence_list[i_t] = "would"
+            else: nlp_sentence_list[i_t] = ""   
+        elif t.is_space:
+            nlp_sentence_list[i_t] = ""
         elif t.pos_ == "PUNCT":
             if t.text.count(".") > 2:
                 meaningful_punct.append((i_t,"..."))
@@ -165,7 +208,8 @@ def get_nlp(sentence, autocorrect=False):
         else: nlp_sentence_list[i_t] = nlp_sentence_list[i_t].text
     
     nlp_sentence_list = [w for w in nlp_sentence_list if w]
-    #nlp_sentence = " ".join(nlp_sentence_list)
+    
+    #print("nlp_sentence_list",nlp_sentence_list)
     
     if autocorrect:
         nlp_sentence = " ".join(nlp_sentence_list)
@@ -196,7 +240,7 @@ def get_nlp(sentence, autocorrect=False):
                 if nlp_sentence_list[mp[0]] != mp[1]:
                     nlp_sentence_list.insert(mp[0], mp[1])
         
-    return nlp(" ".join(nlp_sentence_list))
+    return nlp(" ".join(nlp_sentence_list).replace("  ", " "))
 
 
 #get_nlp("Which genre of album is harder.....faster?", autocorrect=True)
@@ -206,42 +250,11 @@ def get_nlp(sentence, autocorrect=False):
 #get_nlp("of what nationality is ken mcgoogan", autocorrect=True)
 #get_nlp("you're fun", autocorrect=True)
 #get_nlp("where's the fun", autocorrect=True)
+#get_nlp("whats the name of the organization that was founded by  frei otto", True)
+#get_nlp("Hurry! We’re late!",True)
 
 
 # In[11]:
-
-
-#questions = [ 
-#    "Which actor voiced the Unicorn in The Last Unicorn?",
-#    "And Alan Arkin was behind...?",
-#    "And Alan Arkin be behind...? Why How when which was happy make fun",
-#    "Who is the composer of the soundtrack?",
-#    "So who performed the songs?",
-#    "Genre of this band's music?",
-#    "By the way, who was the director?"
-#            ]
-#
-#q_test = str("Which actor voiced the Unicorn in The Last Unicorn? "+
-#    "And Alan Arkin was behind...? "+
-#    "And Alan Arkin be behind...? Why How when which was happy make fun. "+
-#    "Who is the composer of the soundtrack? "+
-#    "So who performed songs? "+
-#    "Genre of this band's music? "+
-#    "By the way, who was the director? ")
-#
-#q_test_2 = "Who is the wife of Barack Obama?"
-
-
-# In[12]:
-
-
-#q0_nlp = get_nlp(questions[0])
-#q0_nlp_test = get_nlp(q_test)
-#q0_nlp_test_2 = get_nlp(q_test_2)
-#print(q0_nlp)
-
-
-# In[13]:
 
 
 def is_wd_entity(to_check):
@@ -261,22 +274,22 @@ def is_valide_wd_id(to_check):
 #print(is_wd_entity("Q155"))
 
 
-# In[14]:
+# In[12]:
 
 
 # TODO redo the functions and optimize
 
-def is_entity_or_literal(wd_object):
-    if is_wd_entity(wd_object.strip()):
+def is_entity_or_literal(to_check):
+    if is_wd_entity(to_check.strip()):
         return True
     pattern = re.compile('^[A-Za-z0-9]*$')
-    if len(wd_object) == 32 and pattern.match(wd_object.strip()):
+    if len(to_check) == 32 and pattern.match(to_check.strip()):
         return False
     return True
 
 # return if the given string is a literal or a date
-def is_literal_or_date (answer): 
-    return not('www.wikidata.org' in answer)
+def is_literal_or_date(to_check): 
+    return not('www.wikidata.org' in to_check)
 
 # return if the given string describes a year in the format YYYY
 def is_year(year):
@@ -378,9 +391,9 @@ def get_all_statements_of_entity(entity_id):
     # check entity pattern
     if not is_wd_entity(entity_id.strip()):
         return False
-    if statements_dict.get(entity_id) != None:
+    if wd_local_statements_dict.get(entity_id) != None:
         #print("saved statement")
-        return statements_dict[entity_id]
+        return wd_local_statements_dict[entity_id]
     entity = "http://www.wikidata.org/entity/"+entity_id
     statements = []
     # entity as subject
@@ -388,7 +401,7 @@ def get_all_statements_of_entity(entity_id):
     # entity as object
     triples_obj, cardinality_obj = hdt_wd.search_triples("", "", entity)
     if cardinality_sub + cardinality_obj > 5000:
-        statements_dict[entity_id] = []
+        wd_local_statements_dict[entity_id] = []
         return []
     # iterate through all triples in which the entity occurs as the subject
     for triple in triples_sub:
@@ -408,7 +421,7 @@ def get_all_statements_of_entity(entity_id):
                         "qualifier_predicate":{
                             "id": wikidata_url_to_wikidata_id(qualifier_statement['predicate'])
                         }, 
-                        "qualifier_object":{	
+                        "qualifier_object":{
                             "id": wikidata_url_to_wikidata_id(qualifier_statement['object'])
                         }})
             statements.append({'entity': {'id': wikidata_url_to_wikidata_id(sub)}, 'predicate': {'id': wikidata_url_to_wikidata_id(pre)}, 'object': {'id': wikidata_url_to_wikidata_id(obj)}, 'qualifiers': qualifiers})
@@ -445,25 +458,27 @@ def get_all_statements_of_entity(entity_id):
         else:
             statements.append({'entity': {'id': wikidata_url_to_wikidata_id(sub)}, 'predicate': {'id': wikidata_url_to_wikidata_id(pre)}, 'object': {'id': wikidata_url_to_wikidata_id(obj)}, 'qualifiers': []})
     # cache the data
-    statements_dict[entity_id] = statements
+    wd_local_statements_dict[entity_id] = statements
     return statements
 
-#print(len(get_all_statements_of_entity("Q16614390")))
+#print(len(get_all_statements_of_entity("Q267721")))
+#for s in get_all_statements_of_entity("Q267721"):
+#    print(s)
 #save_cache_data()
 
 
-# In[15]:
+# In[13]:
 
 
 def get_wd_ids_online(name, is_predicate=False, top_k=3):
     name = name.split('(')[0]
     
-    if is_predicate and wd_predicate_ids_dict.get(name) != None:
+    if is_predicate and wd_online_predicate_ids_dict.get(name) != None and use_cache and len(wd_online_predicate_ids_dict)>0:
         #print("saved predicate online")
-        return wd_predicate_ids_dict[name]
-    elif not is_predicate and wd_word_ids_dict.get(name) != None:
+        return wd_online_predicate_ids_dict[name][:top_k]
+    elif not is_predicate and wd_online_word_ids_dict.get(name) != None and use_cache and len(wd_online_word_ids_dict)>0:
         #print("saved word online")
-        return wd_word_ids_dict[name]
+        return wd_online_word_ids_dict[name][:top_k]
 
     request_successfull = False
     entity_ids = ""
@@ -478,47 +493,64 @@ def get_wd_ids_online(name, is_predicate=False, top_k=3):
             time.sleep(5)
     results = entity_ids.get("search")
     if not results:
-        if is_predicate: wd_predicate_ids_dict[name] = ""
-        else: wd_word_ids_dict[name] = ""
-        return ""
+        if is_predicate: wd_online_predicate_ids_dict[name] = [] 
+        else: wd_online_word_ids_dict[name] = [] 
+        return []
     if not len(results):
-        if is_predicate: wd_predicate_ids_dict[name] = ""
-        else: wd_word_ids_dict[name] = ""
-        return ""
+        if is_predicate: wd_online_predicate_ids_dict[name] = [] 
+        else: wd_online_word_ids_dict[name] = []
+        return [] 
     res = []
     for result in results:
         res.append(result['id'])
     
-    if is_predicate: wd_predicate_ids_dict[name] = res
-    else: wd_word_ids_dict[name] = res
+    if is_predicate: wd_online_predicate_ids_dict[name] = res
+    else: wd_online_word_ids_dict[name] = res
     
-    return res[:top_k]
-#print(get_wd_ids_online("be", is_predicate=True, top_k=1))
+    if res:
+        return res[:top_k]
+    else:
+        return []
+
+#print(get_wd_ids_online("be", is_predicate=False, top_k=1))
 
 
-# In[16]:
+# In[14]:
 
 
 # very computational
-def get_most_similar(word, topn=5):
-    word = nlp.vocab[str(word)]
+def get_most_similar(word, top_k=3):
+    print("behold: get_most_similar started with:", word)
+    word_text = str(word.lower())
+    if word_similarities_dict.get(word) != None and use_cache and len(word_similarities_dict)>0:
+        return word_similarities_dict[word][:top_k]
+    
+    word = nlp.vocab[word_text]
     queries = [w for w in word.vocab if w.is_lower == word.is_lower and w.prob >= -15]
     by_similarity = sorted(queries, key=lambda w: word.similarity(w), reverse=True)
-    return [(w.lower_,w.similarity(word)) for w in by_similarity[:topn+1] if w.lower_ != word.lower_]
+    
+    word_similarities = [(w.text.lower(),float(w.similarity(word))) for w in by_similarity[:10] if w.lower_ != word.lower_]
 
-#print(get_most_similar("voiced", topn=3))
+    word_similarities_dict[word_text] = word_similarities
+    
+    save_cache_data()
+    
+    return word_similarities[:top_k]
+
+#print(get_most_similar("voiced", top_k=3))
+#save_cache_data()
 
 
-# In[17]:
+# In[15]:
 
 
-def get_wd_ids(word, is_predicate=False, top_k=3, limit=10):
-    if is_predicate and wd_predicate_ids_dict.get(word) != None:
+def get_wd_ids(word, is_predicate=False, top_k=3, limit=6, online=False):
+    if is_predicate and wd_local_predicate_ids_dict.get(word) != None and use_cache and len(wd_local_predicate_ids_dict)>0:
         #print("saved predicate local")
-        return wd_predicate_ids_dict[word]
-    elif not is_predicate and wd_word_ids_dict.get(word) != None:
+        return wd_local_predicate_ids_dict[word][:top_k]
+    elif not is_predicate and wd_local_word_ids_dict.get(word) != None and use_cache and len(wd_local_word_ids_dict)>0:
         #print("saved word local")
-        return wd_word_ids_dict[word]
+        return wd_local_word_ids_dict[word][:top_k]
     
     language = "en"
     word_formated = str("\""+word+"\""+"@"+language)
@@ -535,46 +567,45 @@ def get_wd_ids(word, is_predicate=False, top_k=3, limit=10):
     if is_predicate: results = [r for r in results if is_wd_predicate(r)]
         
     # cache the data
-    if is_predicate: wd_predicate_ids_dict[word] = results
-    else: wd_word_ids_dict[word] = results
+    if is_predicate: wd_local_predicate_ids_dict[word] = results
+    else: wd_local_word_ids_dict[word] = results
     
-    return results if limit<=0 else results[:limit]
+    return results if limit<=0 else results[:limit-1]
      
-    
+#print(get_wd_ids("", is_predicate=False, top_k=1))
 #get_wd_ids("The Last Unicorn", top_k=0, limit=10)
 #print(get_wd_ids("wife", is_predicate=False , top_k=0, limit=0))
 #print(get_wd_ids("voiced", is_predicate=False , top_k=0, limit=0))
 
 
-# In[18]:
+# In[16]:
 
 
-def get_wd_label(from_id):
+def get_wd_label(from_id, language="en"):
     #print("from_id",from_id)
     if is_valide_wd_id(from_id):
-        if wd_labels_dict.get(from_id) != None:
+        if wd_labels_dict.get(from_id) != None and use_cache and len(wd_labels_dict)>0:
             #print("saved label local")
             return wd_labels_dict[from_id]
         
-        language = "en"
         id_url = "http://www.wikidata.org/entity/"+from_id
         t_name, card_name = hdt_wd.search_triples(id_url, "http://schema.org/name", "")
-        name = [t[2].split('\"@en')[0].replace("\"", "") for t in t_name if "@"+language in t[2]]
+        name = [t[2].split('\"@'+language)[0].replace("\"", "") for t in t_name if "@"+language in t[2]]
+        #name = [t[2].split('@en')[0] for t in t_name if "@"+language in t[2]]
         result = name[0] if name else ''
         wd_labels_dict[from_id] = result #caching
         return result
         
     else:
-        return ''
+        return from_id
     
 #print(get_wd_label("P725"))
 #get_wd_label("Q20789322")
+#get_wd_label("Q267721")
 
 
-# In[19]:
+# In[17]:
 
-
-get_ipython().run_line_magic('matplotlib', 'inline')
 
 # Building colors from graph
 def get_color(node_type):
@@ -604,54 +635,48 @@ def plot_graph(graph, name, title="Graph"):
 #plot_graph(graph, "file_name_graph", "Graph_title")
 
 
-# In[20]:
+# In[18]:
 
 
-# TODO: handle dates and other literals, idea to start: entity != Q and objects != Q
-
-def make_statements_graph(statements, indexing_predicates=True):
-    BANNED_WD_IDS = [
-        "Q4167410","Q66087861","Q65932995","Q21281405","Q17442446","Q41770487","Q29548341",
-        "Q29547399","Q25670"
-    ]
-    BANNED_WD_PRED_IDS = [
-        "P1687","P7087","P1889","P646", "P227", "P1256", "P1257", "P1258", "P1260", "P301",
-        "P18","P1266","P487","P1970","P2529", "P4390", "P4342", "P4213", "P487", "P2624",
-        "P4953", "P2241", "P345", "P703", "P2163", "P18", "P436", "P227", "P646", "P2581",
-        "P1006", "P244", "P214", "P1051", "P1296", "P461", "P2959", "P1657", "P3834","P243",
-        "P3306","P6932","P356","P1630","P3303","P1921","P1793","P1628","P1184","P1662","P2704",
-        "P4793","P1921","P2302"
-    ]
+def make_statements_graph_worker(graph, predicate_nodes, turn, indexing_predicates, BANNED_WD_IDS, BANNED_WD_PRED_IDS, in_mp_queue, out_mp_queue, predicate_nodes_lock):
+    #for statement in statements:
+    sentinel = None
     
-    graph = nx.Graph()
-    turn=0
-    predicate_nodes = {}
-
-    for statement in statements:
-        #statement['entity']['id'] in BANNED_WD_IDS 
-        #statement['object']['id'] in BANNED_WD_IDS
-        #statement['predicate']['id'] in BANNED_WD_PRED_IDS
-        if (statement['entity']['id'][0] != "Q"
-            or statement['entity']['id'] in BANNED_WD_IDS
+    for statement in iter(in_mp_queue.get, sentinel):
+        #print("statement",statement)
+        #if (statement['entity']['id'][0] != "Q"
+        #    or statement['entity']['id'] in BANNED_WD_IDS
+        #    or statement['predicate']['id'][0] != "P"
+        #    or statement['predicate']['id'] in BANNED_WD_PRED_IDS
+        #    or statement['object']['id'][0] != "Q"
+        #    or statement['object']['id'] in BANNED_WD_IDS):
+        #    continue
+            
+        if (
+            statement['entity']['id'] in BANNED_WD_IDS
             or statement['predicate']['id'][0] != "P"
             or statement['predicate']['id'] in BANNED_WD_PRED_IDS
-            or statement['object']['id'][0] != "Q"
-            or statement['object']['id'] in BANNED_WD_IDS):
+            or statement['object']['id'] in BANNED_WD_IDS
+            ):
             continue
+            
+        #elif(get_wd_label(statement['predicate']['id']).find("ID") != -1):
+        #    continue
         
         #print(statement)
         if not statement['entity']['id'] in graph:
             graph.add_node(statement['entity']['id'], name=get_wd_label(statement['entity']['id']), type='entity', turn=turn)
         if not statement['object']['id'] in graph:
             graph.add_node(statement['object']['id'], name=get_wd_label(statement['object']['id']), type='entity', turn=turn)
-
-        # increment index of predicate or set it at 0
-        if not statement['predicate']['id'] in predicate_nodes or not indexing_predicates:
-            predicate_nodes_index = 1
-            predicate_nodes[statement['predicate']['id']] = 1
-        else:
-            predicate_nodes[statement['predicate']['id']] += 1
-            predicate_nodes_index = predicate_nodes[statement['predicate']['id']]
+        
+        with predicate_nodes_lock:
+            # increment index of predicate or set it at 0
+            if not statement['predicate']['id'] in predicate_nodes or not indexing_predicates:
+                predicate_nodes_index = 1
+                predicate_nodes[statement['predicate']['id']] = 1
+            else:
+                predicate_nodes[statement['predicate']['id']] += 1
+                predicate_nodes_index = predicate_nodes[statement['predicate']['id']]
 
         # add the predicate node
         predicate_node_id = (statement['predicate']['id'])
@@ -667,15 +692,77 @@ def make_statements_graph(statements, indexing_predicates=True):
             
         graph.add_edge(statement['entity']['id'], predicate_node_id)
         graph.add_edge(predicate_node_id, statement['object']['id'])
+        
+    out_mp_queue.put(graph)
+
+
+# In[19]:
+
+
+# TODO: handle special literals? which one
+
+def make_statements_graph(statements, indexing_predicates=True, cores=mp.cpu_count()):
+    BANNED_WD_IDS = [
+        "Q4167410","Q66087861","Q65932995","Q21281405","Q17442446","Q41770487","Q29548341",
+        "Q29547399","Q25670"
+    ]
+    BANNED_WD_PRED_IDS = [
+        "P1687","P7087","P1889","P646", "P227", "P1256", "P1257", "P1258", "P1260", "P301",
+        "P18","P1266","P487","P1970","P2529", "P4390", "P4342", "P4213", "P487", "P2624",
+        "P4953", "P2241", "P345","P703", "P2163", "P18", "P436", "P227", "P646", "P2581",
+        "P1006", "P244", "P214", "P1051", "P1296","P461", "P2959", "P1657", "P3834","P243",
+        "P3306","P6932","P356","P1630","P3303","P1921","P1793","P1628","P1184","P1662","P2704",
+        "P4793","P1921","P2302","P6562","P6127","P4342","P6145","P5786","P5099","P4947","P5032",
+        "P4933","P4632","P4529","P4277","P4282","P3135","P4276","P3593","P2638","P3804","P3145",
+        "P2509","P3212","P2704","P480","P3844","P3141","P3808","P3933","P2346","P3077","P3417",
+        "P2529","P3302","P3143","P2334","P3129","P3138","P3107","P2603","P2631","P2508","P2465",
+        "P2014", "P1874", "P2518", "P1265", "P1237","P1712", "P1970","P1804","P905","P1562",
+        "P1258","P646","P345"
+    ]
+    
+    graph = nx.Graph()
+    turn=0
+    
+    predicate_nodes = mp.Manager().dict()
+    predicate_nodes_lock = mp.Manager().Lock()
+    
+    paths_keyword_nodes = []
+    if cores <= 0: cores = 1
+
+    out_mp_queue = mp.Queue()
+    in_mp_queue = mp.Queue()
+    sentinel = None
+
+    for statement in statements:
+        in_mp_queue.put(statement)
+
+    procs = [mp.Process(target = make_statements_graph_worker, args = (graph, predicate_nodes, turn, indexing_predicates, BANNED_WD_IDS, BANNED_WD_PRED_IDS, in_mp_queue, out_mp_queue, predicate_nodes_lock)) for i in range(cores)]
+
+    for proc in procs:
+        proc.daemon = True
+        proc.start()
+    for proc in procs:    
+        in_mp_queue.put(sentinel)
+    for proc in procs:
+        local_g = out_mp_queue.get()
+        graph = nx.compose(graph,local_g)
+    for proc in procs:
+        proc.join()
     
     return graph, predicate_nodes
 
 #test_graph = make_statements_graph(test_unduplicate_statements, indexing_predicates=False)
 #print(test_graph[1])
 #plot_graph(test_graph[0],"test")
+#print("len(filtered_statements)",len(filtered_statements))
+#start_time = time.time()
+#graph, predicate_nodes = make_statements_graph(filtered_statements, indexing_predicates=True, cores=1)
+#print(time.time()-start_time)
+#print("--> ",len(graph), "nodes and", graph.size(), "edges")
+#print(predicate_nodes)
 
 
-# In[21]:
+# In[20]:
 
 
 def merge_lists(list_1, list_2):
@@ -687,10 +774,17 @@ def merge_lists(list_1, list_2):
 #print(merge_lists(["author"],['P50']))
 
 
-# In[22]:
+# In[21]:
 
 
-def get_themes(nlp_question, top_k=3):
+def get_themes_ids_from_chunks(noun_chunks, top_k=3, online=False):
+    if online:
+        theme_ids = [get_wd_ids_online(chunk.text, top_k=top_k)+get_wd_ids(chunk.text, top_k=top_k) for chunk in noun_chunks]
+    else:
+        theme_ids = [get_wd_ids(chunk.text, top_k=top_k) for chunk in noun_chunks]
+    return theme_ids
+
+def get_themes(nlp_question, top_k=3, online=False):
     # PART1: finding themes as the user typed it
     filter_list = ["PART", "PRON", "NUM"]
     nlp_list_src = list(nlp_question)
@@ -704,8 +798,9 @@ def get_themes(nlp_question, top_k=3):
     theme_complements = []
     
     noun_chunks = [chunk for chunk in nlp_question.noun_chunks]
-    theme_ids = [get_wd_ids(chunk.text, top_k=top_k) for chunk in noun_chunks][:top_k]
-
+    #theme_ids = [get_wd_ids(chunk.text, top_k=top_k) for chunk in noun_chunks][:top_k]
+    theme_ids = get_themes_ids_from_chunks(noun_chunks, top_k=3, online=online)
+            
     for i, chunk in enumerate(theme_ids):
         if chunk: themes.append((noun_chunks[i], chunk))
         else: theme_complements.append(noun_chunks[i])
@@ -722,7 +817,7 @@ def get_themes(nlp_question, top_k=3):
             nlp_list_cap.append(w.text.capitalize())
             nlp_list_low.append(w.text.lower())
             nlp_list_lemma.append(w.lemma_)
-        if w.pos_ == "DET":
+        if w.pos_ != "DET":
             nlp_list_no_det.append(w.text)
             
     nlp_question_cap = get_nlp(" ".join([e for e in nlp_list_cap]))
@@ -735,7 +830,12 @@ def get_themes(nlp_question, top_k=3):
     themes += [(ent, [ent.kb_id_]) for ent in get_kb_ents(nlp_question_lemma.text) if ent.kb_id_ != "NIL" and (ent, [ent.kb_id_]) not in themes]
     themes += [(ent, [ent.kb_id_]) for ent in get_kb_ents(nlp_question_no_det.text) if ent.kb_id_ != "NIL" and (ent, [ent.kb_id_]) not in themes]
     
-    #print(themes)
+    if online:
+        themes += [(ent, get_wd_ids_online(ent.text, is_predicate=False, top_k=top_k)) for ent in get_kb_ents(nlp_question_cap.text)]
+        themes += [(ent, get_wd_ids_online(ent.text, is_predicate=False, top_k=top_k)) for ent in get_kb_ents(nlp_question_low.text)]
+        themes += [(ent, get_wd_ids_online(ent.text, is_predicate=False, top_k=top_k)) for ent in get_kb_ents(nlp_question_lemma.text)]
+        themes += [(ent, get_wd_ids_online(ent.text, is_predicate=False, top_k=top_k)) for ent in get_kb_ents(nlp_question_no_det.text)]
+    
     noun_chunks = []
     
     previous_title_position = 0
@@ -753,28 +853,32 @@ def get_themes(nlp_question, top_k=3):
     
     noun_chunks += [chunk for chunk in nlp_question_cap.noun_chunks]
     
-    theme_ids = [get_wd_ids(chunk.text, top_k=top_k) for chunk in noun_chunks][:top_k]
-
+    #theme_ids = [get_wd_ids(chunk.text, top_k=top_k) for chunk in noun_chunks][:top_k]
+    theme_ids = get_themes_ids_from_chunks(noun_chunks, top_k=3, online=online)
+    
     for i, chunk in enumerate(theme_ids):
         if chunk: themes.append((noun_chunks[i], chunk))
         else: theme_complements.append(noun_chunks[i])
     
     noun_chunks = [chunk for chunk in nlp_question_low.noun_chunks]
-    theme_ids = [get_wd_ids(chunk.text, top_k=top_k) for chunk in noun_chunks][:top_k]
+    #theme_ids = [get_wd_ids(chunk.text, top_k=top_k) for chunk in noun_chunks][:top_k]
+    theme_ids = get_themes_ids_from_chunks(noun_chunks, top_k=3, online=online)
 
     for i, chunk in enumerate(theme_ids):
         if chunk: themes.append((noun_chunks[i], chunk))
         else: theme_complements.append(noun_chunks[i])
             
     noun_chunks = [chunk for chunk in nlp_question_lemma.noun_chunks]
-    theme_ids = [get_wd_ids(chunk.text, top_k=top_k) for chunk in noun_chunks][:top_k]
+    #theme_ids = [get_wd_ids(chunk.text, top_k=top_k) for chunk in noun_chunks][:top_k]
+    theme_ids = get_themes_ids_from_chunks(noun_chunks, top_k=3, online=online)
 
     for i, chunk in enumerate(theme_ids):
         if chunk: themes.append((noun_chunks[i], chunk))
         else: theme_complements.append(noun_chunks[i])
             
     noun_chunks = [chunk for chunk in nlp_question_no_det.noun_chunks]
-    theme_ids = [get_wd_ids(chunk.text, top_k=top_k) for chunk in noun_chunks][:top_k]
+    #theme_ids = [get_wd_ids(chunk.text, top_k=top_k) for chunk in noun_chunks][:top_k]
+    theme_ids = get_themes_ids_from_chunks(noun_chunks, top_k=3, online=online)
 
     for i, chunk in enumerate(theme_ids):
         if chunk: themes.append((noun_chunks[i], chunk))
@@ -789,17 +893,34 @@ def get_themes(nlp_question, top_k=3):
 
         else:
             themes_filtered.append(t)
-            
+    
+    # removing the same elments per rows and skipping already existing rows
+    unique_ids = []
     themes_filtered_undupped = []
     for tf in themes_filtered:
         tmp_ids = []
         for tfid in tf[1]:
-            if tfid not in tmp_ids:
-                tmp_ids.append(tfid)
-        themes_filtered_undupped.append((tf[0],tmp_ids))
+            if tfid not in unique_ids and tfid not in tmp_ids:
+                tfname = get_wd_label(tfid)
+                similarity = get_nlp(tfname).similarity(tf[0])
+                if similarity >= 0.95:
+                    tmp_ids.append(tfid)
+                unique_ids.append(tfid)
+        if tmp_ids and tmp_ids not in [tfu[1] for tfu in themes_filtered_undupped]:
+            themes_filtered_undupped.append((tf[0],tmp_ids))
+    
+    #for tf in themes_filtered:
+    #    tmp_ids = []
+    #    for tfid in tf[1]:
+    #        if tfid not in tmp_ids:
+    #            tmp_ids.append(tfid)
+    #    if tmp_ids not in [tfu[1] for tfu in themes_filtered_undupped]:
+    #        themes_filtered_undupped.append((tf[0],tmp_ids))
+
         
     theme_complements_undupped = []
     [theme_complements_undupped.append(tc) for tc in theme_complements if tc.text not in [tcu.text for tcu in theme_complements_undupped]]
+    
     
     #print(themes_filtered)
     return themes_filtered_undupped, theme_complements_undupped
@@ -807,36 +928,31 @@ def get_themes(nlp_question, top_k=3):
 #q0_themes = get_themes(q0_nlp, top_k=3)
 #q0_themes_test = get_themes(q0_nlp_test)
 #q0_themes_test_2 = get_themes(q0_nlp_test_2)
-#print(q0_themes)
+#print(q0_themes) 
 
 #q_test_3 = get_nlp("the unicorn and the raccoons love obama barack's tacos")
 #q_test_3_themes = get_themes(q_test_3, top_k=3)
 #print(get_enhanced_themes(q_test_3_themes))
 #print(q_test_3_themes)
 
+
+#q_test_test = get_nlp("What is a tv action show?")
 #q_test_test = get_nlp("Who voiced the Unicorn in The Last Unicorn")
 #q_test_test = get_nlp("What is the name of the person who created Saved by the Bell?")
-#get_themes(q_test_test, top_k=3)
-
-#q_themes: ([(Unicorn, ['Q7246', 'Q7246', 'Q7246']), 
-#(The Last Unicorn, ['Q30060419', 'Q16614390', 'Q176198', 'Q15628943', 'Q30060419', 'Q16614390', 'Q176198', 'Q15628943']), 
-#(The Unicorn, ['Q17985004', 'Q18647334', 'Q17553756', 'Q65070436'])], 
-#[the Unicorn, the unicorn, the last unicorn, the Unicorn, the last Unicorn])
+#q_test_test = get_nlp("When did the movie Grease come out?")
+#get_themes(q_test_test, top_k=3, online=True)
 
 
-# In[ ]:
-
-
-
-
-
-# In[23]:
+# In[22]:
 
 
 BANNED_WORDS = ["..."]
 
-def get_theme_tuples(theme_list, top_k=3):
-    return [(t, get_wd_ids(t, top_k=top_k)) for t in theme_list if t not in BANNED_WORDS]
+def get_theme_tuples(theme_list, top_k=3, online=False):
+    tuples = [(t, get_wd_ids(t, top_k=top_k)) for t in theme_list if t not in BANNED_WORDS]
+    if online:
+        tuples += [(t, get_wd_ids_online(t, is_predicate=False, top_k=top_k)) for t in theme_list if t not in BANNED_WORDS]
+    return tuples
 
 def get_theme_no_stopwords(theme_list):
     return [s for s in theme_list if not s.is_stop]
@@ -844,10 +960,10 @@ def get_theme_no_stopwords(theme_list):
 def get_theme_lemmatized(theme_list):
     return [s.lemma_ for s in theme_list]
 
-def get_permutation_tuples(theme_list, start=2):
+def get_permutation_tuples(theme_list, start=2):   
     permutations = []
     for i in range(start, len(theme_list)+1):
-        permutations += itertools.permutations(theme_list,i)
+        permutations += list(it.permutations(theme_list,i))
     return permutations
 
 def get_lemma_permutation_tuples(theme_list, start=2):
@@ -871,46 +987,76 @@ def get_lower_tuples(theme_list):
 def get_capitalized_tuples(theme_list):
     return [" ".join([c.capitalize() for c in [e.text for e in list(l)]]) for l in theme_list]
 
-def get_enhanced_themes(themes, top_k=3, aggressive=False):
-    if aggressive: top_k+=1
+def get_enhanced_themes(themes, top_k=3, title_limit=5, aggressive=False, online=False):
     enhanced_themes = []
     # permute, capitalize, lowering of the words in the complements
     for c in themes[1]:
-        per_lemma = get_theme_tuples(get_non_token_tuples([n for n in get_permutation_tuples(get_theme_lemmatized(c))]),top_k)
-        per_nostop = get_theme_tuples(get_text_tuples(get_permutation_tuples(get_theme_no_stopwords(c),start=1)),top_k)
-        per_lemma_nostop = get_theme_tuples(get_non_token_tuples([get_theme_lemmatized(s) for s in get_permutation_tuples(get_theme_no_stopwords(c),start=1)]),top_k)
+        if len(c) <= title_limit:
+            per_lemma = get_theme_tuples(get_non_token_tuples([n for n in get_permutation_tuples(get_theme_lemmatized(c))]),top_k, online=online)
+            [enhanced_themes.append(p) for p in per_lemma if p[1] and p not in enhanced_themes]
+            del per_lemma
 
-        per_lemma_lower = get_theme_tuples(get_non_token_lower_tuples([n for n in get_permutation_tuples(get_theme_lemmatized(c))]),top_k)
-        per_nostop_lower = get_theme_tuples(get_lower_tuples(get_permutation_tuples(get_theme_no_stopwords(c),start=1)),top_k)
-        per_lemma_nostop_lower = get_theme_tuples(get_non_token_lower_tuples([get_theme_lemmatized(s) for s in get_permutation_tuples(get_theme_no_stopwords(c),start=1)]),top_k)
+            per_nostop = get_theme_tuples(get_text_tuples(get_permutation_tuples(get_theme_no_stopwords(c),start=1)),top_k, online=online)
+            [enhanced_themes.append(p) for p in per_nostop if p[1] and p not in enhanced_themes]
+            del per_nostop
 
-        per_lemma_capitalize = get_theme_tuples(get_non_token_capitalize_tuples([n for n in get_permutation_tuples(get_theme_lemmatized(c))]),top_k)
-        per_nostop_capitalize = get_theme_tuples(get_capitalized_tuples(get_permutation_tuples(get_theme_no_stopwords(c),start=1)),top_k)
-        per_lemma_nostop_capitalize = get_theme_tuples(get_non_token_capitalize_tuples([get_theme_lemmatized(s) for s in get_permutation_tuples(get_theme_no_stopwords(c),start=1)]),top_k)
+            per_lemma_nostop = get_theme_tuples(get_non_token_tuples([get_theme_lemmatized(s) for s in get_permutation_tuples(get_theme_no_stopwords(c),start=1)]),top_k, online=online)
+            [enhanced_themes.append(p) for p in per_lemma_nostop if p[1] and p not in enhanced_themes]
+            del per_lemma_nostop
 
-        per = get_theme_tuples(get_text_tuples(get_permutation_tuples(c)),top_k)
-        per_lower = get_theme_tuples(get_lower_tuples(get_permutation_tuples(c)),top_k)
-        per_capitalize = get_theme_tuples(get_capitalized_tuples(get_permutation_tuples(c)),top_k)
+            per_lemma_lower = get_theme_tuples(get_non_token_lower_tuples([n for n in get_permutation_tuples(get_theme_lemmatized(c))]),top_k, online=online)
+            [enhanced_themes.append(p) for p in per_lemma_lower if p[1] and p not in enhanced_themes]
+            del per_lemma_lower
 
-        for p in (per + per_lower + per_capitalize +
-                 per_lemma + per_lemma_lower + per_lemma_capitalize +
-                 per_nostop + per_nostop_lower + per_nostop_capitalize +
-                 per_lemma_nostop + per_lemma_nostop_lower + per_lemma_nostop_capitalize):
-            if p[1] and p not in enhanced_themes: enhanced_themes.append(p)
+            per_nostop_lower = get_theme_tuples(get_lower_tuples(get_permutation_tuples(get_theme_no_stopwords(c),start=1)),top_k)
+            [enhanced_themes.append(p) for p in per_nostop_lower if p[1] and p not in enhanced_themes]
+            del per_nostop_lower
+
+            per_lemma_nostop_lower = get_theme_tuples(get_non_token_lower_tuples([get_theme_lemmatized(s) for s in get_permutation_tuples(get_theme_no_stopwords(c),start=1)]),top_k, online=online)
+            [enhanced_themes.append(p) for p in per_lemma_nostop_lower if p[1] and p not in enhanced_themes]
+            del per_lemma_nostop_lower
+
+            per_lemma_capitalize = get_theme_tuples(get_non_token_capitalize_tuples([n for n in get_permutation_tuples(get_theme_lemmatized(c))]),top_k, online=online)
+            [enhanced_themes.append(p) for p in per_lemma_capitalize if p[1] and p not in enhanced_themes]
+            del per_lemma_capitalize
+
+            per_nostop_capitalize = get_theme_tuples(get_capitalized_tuples(get_permutation_tuples(get_theme_no_stopwords(c),start=1)),top_k, online=online)
+            [enhanced_themes.append(p) for p in per_nostop_capitalize if p[1] and p not in enhanced_themes]
+            del per_nostop_capitalize
+
+            per_lemma_nostop_capitalize = get_theme_tuples(get_non_token_capitalize_tuples([get_theme_lemmatized(s) for s in get_permutation_tuples(get_theme_no_stopwords(c),start=1)]),top_k, online=online)
+            [enhanced_themes.append(p) for p in per_lemma_nostop_capitalize if p[1] and p not in enhanced_themes]
+
+            per = get_theme_tuples(get_text_tuples(get_permutation_tuples(c)),top_k, online=online)
+            [enhanced_themes.append(p) for p in per if p[1] and p not in enhanced_themes]
+            del per
+
+            per_lower = get_theme_tuples(get_lower_tuples(get_permutation_tuples(c)),top_k, online=online)
+            [enhanced_themes.append(p) for p in per_lower if p[1] and p not in enhanced_themes]
+            del per_lower
+
+            per_capitalize = get_theme_tuples(get_capitalized_tuples(get_permutation_tuples(c)),top_k, online=online)
+            [enhanced_themes.append(p) for p in per_capitalize if p[1] and p not in enhanced_themes]
+            del per_capitalize
     
     if aggressive:
         predicates = []
         [predicates.append(get_wd_label(pred)) for pred in sum([p[1] for p in themes[0]],[]) if get_wd_label(pred) not in predicates]
-        predicates_ids = [get_wd_ids_online(p, is_predicate=True, top_k=top_k) for p in predicates][:top_k]
+        predicates_ids = [get_wd_ids_online(p, is_predicate=True, top_k=top_k) for p in predicates]
         predicated_themes = merge_lists(predicates, predicates_ids)
         predicated_themes = [pt for pt in predicated_themes if pt[1] != '']
         if predicates: enhanced_themes += predicated_themes
             
     enhanced_themes_filtered = []
     for et in enhanced_themes:
-        #print(et[0],[t[0].text for t in themes[0]],et[0] in [t[0].text for t in themes[0]])
         if not et[0] in [t[0].text for t in themes[0]]:
-            enhanced_themes_filtered.append(et)
+            if et[0] in [e[0] for e in enhanced_themes_filtered]:
+                index_et = [e[0] for e in enhanced_themes_filtered].index(et[0])
+                if index_et != -1:
+                    enhanced_themes_filtered[index_et] = (et[0], enhanced_themes_filtered[index_et][1]+et[1]) #.append((et[0],et[1][:top_k]))
+                else: enhanced_themes_filtered.append((et[0],et[1][:top_k]))
+            else:
+                enhanced_themes_filtered.append((et[0],et[1][:top_k]))
     
     return enhanced_themes_filtered
 
@@ -921,8 +1067,10 @@ def get_enhanced_themes(themes, top_k=3, aggressive=False):
 #print(q_test_3_themes[0])
 #print(get_enhanced_themes(q_test_3_themes, aggressive=False))
 
+#print(get_enhanced_themes(q_test_3_themes, aggressive=True))
 
-# In[24]:
+
+# In[23]:
 
 
 def get_predicates_online(nlp_sentence, top_k=3, aggressive=False):
@@ -953,7 +1101,7 @@ def get_predicates_online(nlp_sentence, top_k=3, aggressive=False):
             if not p_id:
                 p_id = get_wd_ids_online(p.lemma_, is_predicate=True, top_k=top_k)
                 if not p_id:
-                    similar_words = [w[0] for w in get_most_similar(p.lemma_, topn=top_k)]
+                    similar_words = [w[0] for w in get_most_similar(p.lemma_, top_k=top_k)]
                     for sw in similar_words:
                         if not p_id:
                             p_id = get_wd_ids_online(sw, is_predicate=True, top_k=top_k)
@@ -974,15 +1122,7 @@ def get_predicates_online(nlp_sentence, top_k=3, aggressive=False):
 #q0_predicates_test_2 = get_predicates_online(q0_nlp_test_2, top_k=3, aggressive=True)
 
 
-# In[25]:
-
-
-#get_nlp("was").similarity(get_nlp("instance of"))
-#get_wd_ids_online("do", is_predicate=True, top_k=3)
-#get_nlp("do")[0].lemma_
-
-
-# In[26]:
+# In[24]:
 
 
 def get_predicates(nlp_sentence, themes=False, top_k=0):
@@ -1032,17 +1172,17 @@ def get_predicates(nlp_sentence, themes=False, top_k=0):
 #print(q0_predicates)
 
 
-# In[27]:
+# In[25]:
 
 
 def extract_ids(to_extract):
-    return [i for i in itertools.chain.from_iterable([id[1] for id in to_extract])]
+    return [i for i in it.chain.from_iterable([id[1] for id in to_extract])]
 #extract_ids([('name', ['id'])]) #q0_themes[0] #q0_focused_parts #q0_predicates
 #print(extract_ids([("The Last Unicorn", ['Q16614390']),("Second Theme", ['Q12345'])]))
 #extract_ids(q0_focused_parts)
 
 
-# In[28]:
+# In[26]:
 
 
 def get_similarity_by_words(nlp_word_from, nlp_word_to):
@@ -1056,7 +1196,7 @@ def get_similarity_by_words(nlp_word_from, nlp_word_to):
 #print(get_similarity_by_words(get_nlp("character role"), get_nlp("voice actor")))
 
 
-# In[29]:
+# In[27]:
 
 
 def get_similarity_by_ids(word_id_from, word_id_to):
@@ -1067,56 +1207,126 @@ def get_similarity_by_ids(word_id_from, word_id_to):
 #print(get_similarity_by_ids("P453", "P725"))
 
 
-# In[30]:
+# In[28]:
 
 
-def get_top_similar_statements(statements, from_token_id, similar_to_name, top_k=3, qualifier=False, statement_type="object"):
+def get_top_similar_statements(statements, from_token_id, similar_to_name, top_k=0, qualifier=False, statement_type="object", time_sentitive=False):
     highest_matching_similarity = -1
     top_statements = []
     nlp_name = get_nlp(similar_to_name)
     
+    #print("get_top_similar_statements from_token_id",from_token_id)
     if get_wd_label(from_token_id):
         for statement in statements:
-            if qualifier:
-                if statement.get('qualifiers'):
+            if top_k>0:
+                if qualifier:
                     for qualifier in statement['qualifiers']:
-                        nlp_word_to = get_nlp(get_wd_label(qualifier[statement_type]['id']))
+                        if time_sentitive and is_timestamp(qualifier[statement_type]['id']):
+                            top_statements.append((1, statement))
+                        else:
+                            nlp_word_to = get_nlp(get_wd_label(qualifier[statement_type]['id']))
+                            matching_similarity = get_similarity_by_words(nlp_name, nlp_word_to)
+                            top_statements.append((matching_similarity, statement))
+                else:
+                    if time_sentitive and is_timestamp(statement[statement_type]['id']):
+                        top_statements.append((1, statement))
+                    else:
+                        nlp_word_to = get_nlp(get_wd_label(statement[statement_type]['id']))
                         matching_similarity = get_similarity_by_words(nlp_name, nlp_word_to)
-                        if highest_matching_similarity == -1 or matching_similarity > highest_matching_similarity:
+                        top_statements.append((matching_similarity, statement))
+            else:    
+                if qualifier:
+                    if statement.get('qualifiers'):
+                        for qualifier in statement['qualifiers']:
+                            if time_sentitive and is_timestamp(qualifier[statement_type]['id']):
+                                top_statements.append((1, statement))
+                            else:
+                                nlp_word_to = get_nlp(get_wd_label(qualifier[statement_type]['id']))
+                                matching_similarity = get_similarity_by_words(nlp_name, nlp_word_to)
+                                if highest_matching_similarity == -1 or matching_similarity >= highest_matching_similarity:
+                                    highest_matching_similarity = matching_similarity
+                                    best_statement = statement
+                                    top_statements.append((highest_matching_similarity, best_statement))
+                else:
+                    if time_sentitive and is_timestamp(statement[statement_type]['id']):
+                        top_statements.append((1, statement))
+                    else:
+                        nlp_word_to = get_nlp(get_wd_label(statement[statement_type]['id']))
+                        matching_similarity = get_similarity_by_words(nlp_name, nlp_word_to)
+                        if highest_matching_similarity == -1 or matching_similarity >= highest_matching_similarity:
                             highest_matching_similarity = matching_similarity
                             best_statement = statement
                             top_statements.append((highest_matching_similarity, best_statement))
-            else:
-                nlp_word_to = get_nlp(get_wd_label(statement[statement_type]['id']))
-                matching_similarity = get_similarity_by_words(nlp_name, nlp_word_to)
-                if highest_matching_similarity == -1 or matching_similarity > highest_matching_similarity:
-                    highest_matching_similarity = matching_similarity
-                    best_statement = statement
-                    top_statements.append((highest_matching_similarity, best_statement))
-            
-    return sorted(top_statements, key=lambda x: x[0], reverse=True)[:top_k]
-
-#statements = get_all_statements_of_entity('Q176198')
-#top_similar_statements = get_top_similar_statements(statements, 'Q176198', 'voiced')
-#print(top_similar_statements[0])
+    if top_k > 0:        
+        return sorted(top_statements, key=lambda x: x[0], reverse=True)[:top_k]
+    else:
+        return sorted(top_statements, key=lambda x: x[0], reverse=True)
+    
+#statements = get_all_statements_of_entity('Q503992')
+#top_similar_statements = get_top_similar_statements(statements, 'Q267721', 'western')
+#print(top_similar_statements)
+ 
 
 
-# In[31]:
+# In[29]:
 
 
-def get_best_similar_statements_by_word(from_token_ids, similar_to_name, top_k=3, qualifier=False, statement_type="object"):
+def get_best_similar_statements_by_word_worker(in_mp_queue, out_mp_queue, top_k, qualifier, statement_type, time_sentitive):
+    sentinel = None
     best_statements = []
-    for token in from_token_ids:
+    
+    for token,similar_to_name in iter(in_mp_queue.get, sentinel):
+    #    print("working on",token,similar_to_name)
         statements = get_all_statements_of_entity(token)
-        if statements: best_statements += get_top_similar_statements(statements, token, similar_to_name, top_k=top_k, qualifier=qualifier, statement_type=statement_type)
+        if statements: best_statements += get_top_similar_statements(statements, token, similar_to_name, top_k=top_k, qualifier=qualifier, statement_type=statement_type, time_sentitive=time_sentitive)
+    #    print("done with",token,similar_to_name)
+    
+    out_mp_queue.put(best_statements)
+        
 
-    return sorted(best_statements, key=lambda x: x[0], reverse=True)[:top_k]
+
+# In[30]:
+
+
+def get_best_similar_statements_by_word(from_token_ids, similar_to_name, top_k=3, qualifier=False, statement_type="object", time_sentitive=False, cores=1):
+    if not similar_to_name:
+        return []
+    
+    best_statements = []
+    if cores > 1:
+        out_mp_queue = mp.Queue()
+        in_mp_queue = mp.Queue()
+        sentinel = None
+
+        for token in from_token_ids:
+            in_mp_queue.put((token,similar_to_name))
+
+        procs = [mp.Process(target = get_best_similar_statements_by_word_worker, args = (in_mp_queue, out_mp_queue, top_k, qualifier, statement_type, time_sentitive)) for i in range(cores)]
+
+        for proc in procs:
+            proc.daemon = True
+            proc.start()
+        for proc in procs:    
+            in_mp_queue.put(sentinel)
+        for proc in procs:
+            best_statements += out_mp_queue.get()
+        for proc in procs:
+            proc.join()
+    else:
+        for token in from_token_ids:
+            statements = get_all_statements_of_entity(token)
+            if statements: best_statements += get_top_similar_statements(statements, token, similar_to_name, top_k=top_k, qualifier=qualifier, statement_type=statement_type, time_sentitive=time_sentitive)
+    
+    #print("best_statements",best_statements)
+    return sorted(best_statements, key=lambda x: x[0], reverse=True)
 
 #best_similar_statements = get_best_similar_statements_by_word(extract_ids(q0_themes[0]), 'voiced', top_k=3, qualifier=True, statement_type="qualifier_object")
 #print(best_similar_statements[0])
 
+#init_clusters = cluster_extend_by_words(theme_ids, [p[0].text for p in q_predicates+predicates_enhanced], top_k=deep_k, time_sentitive=time_sensitive,cores=2)
 
-# In[32]:
+
+# In[31]:
 
 
 def get_statements_subjects_labels(statements):
@@ -1124,7 +1334,7 @@ def get_statements_subjects_labels(statements):
 #print(get_statements_subjects_labels(best_similar_statements))
 
 
-# In[33]:
+# In[32]:
 
 
 def get_statements_predicates_labels(statements):
@@ -1132,7 +1342,7 @@ def get_statements_predicates_labels(statements):
 #print(get_statements_predicates_labels(best_similar_statements))
 
 
-# In[34]:
+# In[33]:
 
 
 def get_statements_objects_labels(statements):
@@ -1140,7 +1350,7 @@ def get_statements_objects_labels(statements):
 #print(get_statements_objects_labels(best_similar_statements))
 
 
-# In[35]:
+# In[34]:
 
 
 def get_statements_qualifier_predicates_labels(statements):
@@ -1148,7 +1358,7 @@ def get_statements_qualifier_predicates_labels(statements):
 #print(get_statements_qualifier_predicates_labels(best_similar_statements))
 
 
-# In[36]:
+# In[35]:
 
 
 def get_statements_qualifier_objects_labels(statements):
@@ -1156,28 +1366,72 @@ def get_statements_qualifier_objects_labels(statements):
 #print(get_statements_qualifier_objects_labels(best_similar_statements))
 
 
+# In[36]:
+
+
+def cluster_extend_by_words_worker(in_mp_queue, out_mp_queue, top_k, time_sentitive, cores):
+    sentinel = None
+    cluster = []
+    
+    for cluster_root_ids,name in iter(in_mp_queue.get, sentinel):
+        cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=True, statement_type="qualifier_predicate", time_sentitive=time_sentitive,cores=1)
+        cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=True, statement_type="qualifier_object", time_sentitive=time_sentitive,cores=1)
+        cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=False, statement_type="predicate", time_sentitive=time_sentitive,cores=1)
+        cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=False, statement_type="object", time_sentitive=time_sentitive,cores=1)
+        
+    out_mp_queue.put(cluster)
+    
+
+
 # In[37]:
 
 
-def cluster_extend_by_words(cluster_root_ids, extending_words, top_k=3):
+def cluster_extend_by_words(cluster_root_ids, extending_words, top_k=3, time_sentitive=False,cores=mp.cpu_count()):
+    if not cluster_root_ids or not extending_words:
+        return []
     cluster = []
-    #start_time = time.time()
+    
+    if cores <= 0: cores = 1
+    out_mp_queue = mp.Queue()
+    in_mp_queue = mp.Queue()
+    sentinel = None
     
     for name in extending_words:
-        #start_cluster_time = time.time()
-        cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=True, statement_type="qualifier_predicate")
-        cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=True, statement_type="qualifier_object")
-        cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=False, statement_type="predicate")
-        cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=False, statement_type="object")
-        #end_time = time.time()
-        #print("EXTENDING Cluster with:", name," ->\tRunning time is {}s".format(round(end_time-start_cluster_time,2)))
-    #end_time = time.time()
-    #print("EXTENDING Clusters ->\tRunning time is {}s".format(round(end_time-start_time,2)))
-    return cluster
+        in_mp_queue.put((cluster_root_ids,name))
+        
+    procs = [mp.Process(target = cluster_extend_by_words_worker, args = (in_mp_queue, out_mp_queue, top_k, time_sentitive, cores)) for i in range(cores)]
+    
+    for proc in procs:
+        proc.daemon = True
+        proc.start()
+    for proc in procs:    
+        in_mp_queue.put(sentinel)
+    for proc in procs:
+        cluster += out_mp_queue.get()
+    for proc in procs:
+        proc.join()    
+    
+    return sorted(cluster, key=lambda x: x[0], reverse=True)
+    
+    #start_time = time.time()
+    #for name in extending_words:
+    #    #start_cluster_time = time.time()
+    #    cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=True, statement_type="qualifier_predicate", time_sentitive=time_sentitive,cores=cores)
+    #    cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=True, statement_type="qualifier_object", time_sentitive=time_sentitive,cores=cores)
+    #    cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=False, statement_type="predicate", time_sentitive=time_sentitive,cores=cores)
+    #    cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=False, statement_type="object", time_sentitive=time_sentitive,cores=cores)
+    #    #end_time = time.time()
+    #    #print("EXTENDING Cluster with:", name," ->\tRunning time is {}s".format(round(end_time-start_cluster_time,2)))
+    ##end_time = time.time()
+    ##print("EXTENDING Clusters ->\tRunning time is {}s".format(round(end_time-start_time,2)))
     
 #test_cluster = cluster_extend_by_words(extract_ids(q0_themes[0]), ['voiced'], top_k=2)
 #test_cluster_test_2 = cluster_extend_by_words(extract_ids(q0_themes_test_2[0]), ['birth'], top_k=2)
 #print(test_cluster[0])
+
+#start_time = time.time()
+#init_clusters = cluster_extend_by_words(theme_ids, [p[0].text for p in q_predicates+predicates_enhanced], top_k=deep_k, time_sentitive=time_sensitive,cores=mp.cpu_count())
+#print("timer",time.time()-start_time)
 
 
 # In[38]:
@@ -1208,12 +1462,13 @@ def statements_flatter(statements):
                 qualifier_statement['object'] = {'id': q['qualifier_object']['id']}
                 best_statements_to_graph.append(qualifier_statement)
             del(tmp_statement['qualifiers'])
-        else: 
+        else:
             #print("tmp_statement", tmp_statement)
             if ('qualifiers' in tmp_statement): del(tmp_statement['qualifiers'])
         if tmp_statement not in best_statements_to_graph:
             #print("best_statements_to_graph", tmp_statement)
             best_statements_to_graph.append(tmp_statement)
+        
     return best_statements_to_graph
 
 #test_flatten_statements = statements_flatter([s[1] for s in test_sorted_statements])
@@ -1238,14 +1493,6 @@ def unduplicate_statements(statements):
 
 
 # In[41]:
-
-
-#test_graph = make_statements_graph(test_unduplicate_statements)
-#print(test_graph[1])
-#plot_graph(test_graph[0], "file_name_graph", "Graph_title")
-
-
-# In[42]:
 
 
 def get_statements_by_id(statements, from_token_id, to_id, qualifier=False, statement_type="predicate"):
@@ -1275,23 +1522,114 @@ def get_statements_by_id(statements, from_token_id, to_id, qualifier=False, stat
 #id_statements_test[0]
 
 
+# In[42]:
+
+
+def cluster_extend_by_words(cluster_root_ids, extending_words, top_k=3, time_sentitive=False,cores=2):
+    if not cluster_root_ids or not extending_words:
+        return []
+    cluster = []
+    
+    if cores <= 0: cores = 1
+    out_mp_queue = mp.Queue()
+    in_mp_queue = mp.Queue()
+    sentinel = None
+    
+    for name in extending_words:
+        in_mp_queue.put((cluster_root_ids,name))
+        
+    procs = [mp.Process(target = cluster_extend_by_words_worker, args = (in_mp_queue, out_mp_queue, top_k, time_sentitive, cores)) for i in range(cores)]
+    
+    for proc in procs:
+        proc.daemon = True
+        proc.start()
+    for proc in procs:    
+        in_mp_queue.put(sentinel)
+    for proc in procs:
+        cluster += out_mp_queue.get()
+    for proc in procs:
+        proc.join()    
+    
+    return sorted(cluster, key=lambda x: x[0], reverse=True)
+    
+    #start_time = time.time()
+    #for name in extending_words:
+    #    #start_cluster_time = time.time()
+    #    cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=True, statement_type="qualifier_predicate", time_sentitive=time_sentitive,cores=cores)
+    #    cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=True, statement_type="qualifier_object", time_sentitive=time_sentitive,cores=cores)
+    #    cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=False, statement_type="predicate", time_sentitive=time_sentitive,cores=cores)
+    #    cluster += get_best_similar_statements_by_word(cluster_root_ids, name, top_k=top_k, qualifier=False, statement_type="object", time_sentitive=time_sentitive,cores=cores)
+    #    #end_time = time.time()
+    #    #print("EXTENDING Cluster with:", name," ->\tRunning time is {}s".format(round(end_time-start_cluster_time,2)))
+    ##end_time = time.time()
+    ##print("EXTENDING Clusters ->\tRunning time is {}s".format(round(end_time-start_time,2)))
+    
+#test_cluster = cluster_extend_by_words(extract_ids(q0_themes[0]), ['voiced'], top_k=2)
+#test_cluster_test_2 = cluster_extend_by_words(extract_ids(q0_themes_test_2[0]), ['birth'], top_k=2)
+#print(test_cluster[0])
+
+#start_time = time.time()
+#init_clusters = cluster_extend_by_words(theme_ids, [p[0].text for p in q_predicates+predicates_enhanced], top_k=deep_k, time_sentitive=time_sensitive,cores=mp.cpu_count())
+#print("timer",time.time()-start_time)
+
+
 # In[43]:
+
+
+def cluster_extend_by_predicates_ids_worker(in_mp_queue, out_mp_queue):
+    sentinel = None
+    cluster = []
+    
+    for cluster_root_id, predicate_id in iter(in_mp_queue.get, sentinel):
+        root_statements = get_all_statements_of_entity(cluster_root_id)
+        if root_statements:
+            cluster += get_statements_by_id(root_statements, cluster_root_id, predicate_id, qualifier=True, statement_type="qualifier_predicate")
+            cluster += get_statements_by_id(root_statements, cluster_root_id, predicate_id, qualifier=False, statement_type="predicate")
+    
+    out_mp_queue.put(cluster)    
+
+
+# In[44]:
 
 
 # parameters
 # cluster_root_ids: ['Qcode']
 # predicates_ids: ['Pcode']
-def cluster_extend_by_predicates_ids(cluster_root_ids, predicates_ids):
+def cluster_extend_by_predicates_ids(cluster_root_ids, predicates_ids, cores=mp.cpu_count()):
+    if not cluster_root_ids or not predicates_ids:
+        return []
+    
     cluster = []
     
-    for cluster_root_id in cluster_root_ids:
-        root_statements = get_all_statements_of_entity(cluster_root_id)
-        #print("root_statements", root_statements)
-        for predicate_id in predicates_ids:
-            cluster += get_statements_by_id(root_statements, cluster_root_id, predicate_id, qualifier=True, statement_type="qualifier_predicate")
-            cluster += get_statements_by_id(root_statements, cluster_root_id, predicate_id, qualifier=False, statement_type="predicate")
+    if cores <= 0: cores = 1
+    out_mp_queue = mp.Queue()
+    in_mp_queue = mp.Queue()
+    sentinel = None
+    
+    for cluster_root_id, predicate_id in it.product(cluster_root_ids, predicates_ids):
+        #print((cluster_root_id, predicates_id))
+        in_mp_queue.put((cluster_root_id, predicate_id))
+        
+    procs = [mp.Process(target = cluster_extend_by_predicates_ids_worker, args = (in_mp_queue, out_mp_queue)) for i in range(cores)]
+    
+    for proc in procs:
+        proc.daemon = True
+        proc.start()
+    for proc in procs:    
+        in_mp_queue.put(sentinel)
+    for proc in procs:
+        cluster += out_mp_queue.get()
+    for proc in procs:
+        proc.join()    
+    
+    #for cluster_root_id in cluster_root_ids:
+    #    root_statements = get_all_statements_of_entity(cluster_root_id)
+    #    #print("root_statements", root_statements)
+    #    for predicate_id in predicates_ids:
+    #        cluster += get_statements_by_id(root_statements, cluster_root_id, predicate_id, qualifier=True, statement_type="qualifier_predicate")
+    #        cluster += get_statements_by_id(root_statements, cluster_root_id, predicate_id, qualifier=False, statement_type="predicate")
 
-    return cluster
+    return cluster #sorted(cluster, key=lambda x: x[0], reverse=True)
     
 #test_predicate_clusters = cluster_extend_by_predicates_ids(extract_ids(q0_themes[0]), extract_ids(q0_predicates))
 #print(len(test_predicate_clusters))
@@ -1301,8 +1639,11 @@ def cluster_extend_by_predicates_ids(cluster_root_ids, predicates_ids):
 #print(len(test_predicate_clusters_test_2))
 #print(test_predicate_clusters_test_2[-1])
 
+#predicate_ids_clusters = cluster_extend_by_predicates_ids(theme_ids, predicates_ids+predicates_enhanced_ids)
+#print(predicate_ids_clusters)
 
-# In[44]:
+
+# In[45]:
 
 
 def cluster_extractor_from_complements(complements):
@@ -1313,7 +1654,7 @@ def cluster_extractor_from_complements(complements):
 #print(cluster_extractor_from_complements(q0_themes[1]))
 
 
-# In[45]:
+# In[46]:
 
 
 #TODO: add cache
@@ -1321,7 +1662,11 @@ def cluster_extractor_from_complements(complements):
 # parameter
 # question: nlp_string
 #limits=plt.axis('off')
-def build_graph(nlp, themes, themes_enhanced, predicates, deep_k=10):
+def build_graph(nlp, themes, themes_enhanced, predicates, deep_k=10, cores=mp.cpu_count()):
+    
+    time_sensitive = False
+    if 'WRB' in [t.tag_ for t in nlp]: time_sensitive = True
+    #print("time_sensitive",time_sensitive)
     #start_time = time.time()
     theme_ids = extract_ids(themes[0])
     theme_enhanced_ids = extract_ids(themes_enhanced)
@@ -1335,18 +1680,18 @@ def build_graph(nlp, themes, themes_enhanced, predicates, deep_k=10):
         if tei in theme_ids:
             tmp = theme_enhanced_ids.pop(i)
     
-    init_clusters = cluster_extend_by_words(theme_ids, [p[0].text for p in predicates+predicates_enhanced], top_k=deep_k)
+    init_clusters = cluster_extend_by_words(theme_ids, [p[0].text for p in predicates+predicates_enhanced], top_k=deep_k, time_sentitive=time_sensitive, cores=cores)
     #print("init_clusters",len(init_clusters))
-    init_clusters_enhanced = cluster_extend_by_words(theme_enhanced_ids, [p[0].text for p in predicates+predicates_enhanced], top_k=deep_k)
+    init_clusters_enhanced = cluster_extend_by_words(theme_enhanced_ids, [p[0].text for p in predicates+predicates_enhanced], top_k=deep_k, time_sentitive=time_sensitive, cores=cores)
     #print("init_clusters_enhanced",len(init_clusters_enhanced))
     init_sorted_statements = sort_statements_by_similarity(init_clusters + init_clusters_enhanced)
     #print("init_sorted_statements",len(init_sorted_statements))
     init_flatten_statements = statements_flatter([s[1] for s in init_sorted_statements])
     #print("init_flatten_statements",len(init_flatten_statements))
     
-    predicate_ids_clusters = cluster_extend_by_predicates_ids(theme_ids, predicates_ids+predicates_enhanced_ids)
+    predicate_ids_clusters = cluster_extend_by_predicates_ids(theme_ids, predicates_ids+predicates_enhanced_ids, cores=cores)
     #print("predicate_ids_clusters",len(predicate_ids_clusters))
-    predicate_ids_enhanced_clusters = cluster_extend_by_predicates_ids(theme_enhanced_ids, predicates_ids+predicates_enhanced_ids)
+    predicate_ids_enhanced_clusters = cluster_extend_by_predicates_ids(theme_enhanced_ids, predicates_ids+predicates_enhanced_ids, cores=cores)
     #print("predicate_ids_enhanced_clusters",len(predicate_ids_enhanced_clusters))
     predicate_ids_flatten_statements = statements_flatter(predicate_ids_clusters+predicate_ids_enhanced_clusters)
     #print("predicate_ids_flatten_statements",len(predicate_ids_flatten_statements))
@@ -1354,7 +1699,10 @@ def build_graph(nlp, themes, themes_enhanced, predicates, deep_k=10):
     clusters = init_flatten_statements+predicate_ids_flatten_statements
     filtered_statements = unduplicate_statements(clusters)
     #print(predicate_ids_enhanced_clusters)
-    graph = make_statements_graph(filtered_statements)
+    graph = make_statements_graph(filtered_statements, cores=cores)
+    
+    #print([get_wd_label(e) for e in g.nodes] )
+    
 
     ##print("clusters:", len(clusters))
     ##print("filtered_statements:", len(filtered_statements))
@@ -1378,7 +1726,62 @@ def build_graph(nlp, themes, themes_enhanced, predicates, deep_k=10):
 #plot_graph(graph, "file_name_graph", "Graph_title")
 
 
-# In[46]:
+# In[47]:
+
+
+def filter_graph_by_names(graph, filtering_names, entities=True, predicates=False):
+    # remove meaningless subgraphs
+    graph_copy = graph.copy()
+    for g in [g for g in (graph.subgraph(c) for c in nx.connected_components(graph))]:
+        is_meaningful = False
+        for e in g:
+            if get_wd_label(e) in filtering_names:
+                is_meaningful = True
+                break
+        if not is_meaningful:
+            for e in g:
+                graph_copy.remove_node(e)
+                
+    return graph_copy
+
+
+#q_theme_names = [q[0].text for q in q_themes[0]]
+#q_theme_enhanced_names = [q[0] for q in q_themes_enhanced]
+#filter_graph_by_names(graph, q_theme_names+q_theme_enhanced_names, entities=True, predicates=False)
+#plot_graph(graph, "subgraph_test", "subgraph_test")
+
+
+# In[48]:
+
+
+#TODO
+def filter_graph_by_ids(graph, filtering_ids, entities=True, predicates=False):
+    # remove meaningless subgraphs
+    #meaningful_ids = theme_ids+theme_enhanced_ids
+    #print("meaningful_ids",meaningful_ids)
+    filtered_graph = nx.Graph()
+    for g in [g for g in (graph.subgraph(c) for c in nx.connected_components(graph))]:
+        is_meaningful = False
+        for e in g:
+            print("e",e)
+            if e in filtering_ids:
+                is_meaningful = True
+                print("break")
+                break
+        if is_meaningful:
+            nx.compose(filtered_graph,g)
+    #print("filtered_graph",filtered_graph)
+
+
+    #plot_graph(filtered_graph, "subgraph_test", "subgraph_test")
+    #plot_graph(graph, "subgraph_test", "subgraph_test")
+
+#q_theme_ids = extract_ids(q_themes[0])
+#q_theme_enhanced_ids = extract_ids(q_themes_enhanced)
+#filter_graph_by_ids(graph, q_theme_ids+q_theme_enhanced_ids, entities=True, predicates=False)
+
+
+# In[49]:
 
 
 # check the graph for complements
@@ -1391,19 +1794,32 @@ def find_name_in_graph(graph, name):
 #print(find_name_in_graph(graph, "the unicorn"))
 
 
-# In[47]:
+# In[50]:
+
+
+# check the graph for complements
+# parameters
+# name: string
+def find_id_in_graph(graph, id_to_find):
+    return [x for x,y in graph.nodes(data=True) if x == id_to_find]
+
+#[find_name_in_graph(c.text) for c in q0_themes[1]]
+#print(find_name_in_graph(graph, "the unicorn"))
+
+
+# In[51]:
 
 
 # TODO: clean the complements by removing stopwords etc.
 def find_theme_complement(graph, themes):
-    return [i for i in itertools.chain.from_iterable(
+    return [i for i in it.chain.from_iterable(
         [id for id in [c for c in [find_name_in_graph(graph, t.text) for t in themes[1]] if c]])]
 
 #print(find_theme_complement(graph, q0_themes_test))
-#[i for i in itertools.chain.from_iterable([id for id in check_theme_complement(graph, q0_themes)])]
+#[i for i in it.chain.from_iterable([id for id in check_theme_complement(graph, q0_themes)])]
 
 
-# In[48]:
+# In[52]:
 
 
 def find_paths_in_graph(graph, node_start, node_end):
@@ -1413,7 +1829,7 @@ def find_paths_in_graph(graph, node_start, node_end):
 #print(test_paths)
 
 
-# In[49]:
+# In[53]:
 
 
 def is_id_in_graph(graph, node_id):
@@ -1421,7 +1837,7 @@ def is_id_in_graph(graph, node_id):
 #print(is_id_in_graph(graph, "Q24039104"))
 
 
-# In[50]:
+# In[54]:
 
 
 def is_name_in_graph(graph, node_name):
@@ -1429,7 +1845,7 @@ def is_name_in_graph(graph, node_name):
 #print(is_name_in_graph(graph, "the Unicorn"))
 
 
-# In[51]:
+# In[55]:
 
 
 def find_paths_for_themes(graph, themes):
@@ -1443,7 +1859,7 @@ def find_paths_for_themes(graph, themes):
                     path = find_paths_in_graph(graph, t_id, c_id)
                     if path:
                         paths.append(path)
-    paths = [i for i in itertools.chain.from_iterable(
+    paths = [i for i in it.chain.from_iterable(
         [id for id in paths])]
     
     return paths
@@ -1451,7 +1867,7 @@ def find_paths_for_themes(graph, themes):
 #print(find_paths_for_themes(graph, q0_themes))
 
 
-# In[52]:
+# In[56]:
 
 
 def get_node_predicates_from_path(paths):
@@ -1464,7 +1880,7 @@ def get_node_predicates_from_path(paths):
 #print(test_node_predicates)
 
 
-# In[53]:
+# In[57]:
 
 
 def get_node_predicate_similarity_from_path(paths, predicates):
@@ -1475,7 +1891,7 @@ def get_node_predicate_similarity_from_path(paths, predicates):
 #print(test_node_pedicate_similarities)
 
 
-# In[54]:
+# In[58]:
 
 
 def get_focused_parts(nlp_sentence, themes, top_k=3):
@@ -1492,12 +1908,12 @@ def get_focused_parts(nlp_sentence, themes, top_k=3):
     #print("focused_parts",focused_parts)
     #print("themes[0]",themes[0])
     
-    focused_parts_len = len(focused_parts)
+    #focused_parts_len = len(focused_parts)
     for t in themes[0]:
         for i_fp, fp in enumerate(focused_parts):
             for i_w, w in enumerate([w.lower_ for w in t[0]]):
                 if fp.lower_ == w:
-                    if i_fp+1 < focused_parts_len-1:
+                    if i_fp+1 < len(focused_parts)-1:
                         if focused_parts[i_fp+1].lower_ == t[0][i_w-1].lower_:
                             #print(i_fp,fp, t[0][i_w-1], t[0])
                             #print("BEFORE focused_parts",focused_parts)
@@ -1506,6 +1922,7 @@ def get_focused_parts(nlp_sentence, themes, top_k=3):
                             #print("AFTER focused_parts",focused_parts)
                             
     
+    focused_parts
     #print()
     #for fp in focused_parts:
     #    print(type(fp))
@@ -1551,55 +1968,7 @@ def get_focused_parts(nlp_sentence, themes, top_k=3):
 #(Last, ['Q16995904', 'Q20072822', 'Q24229340', 'Q20155285'])]
 
 
-# In[55]:
-
-
-#questions_2 = ("what was the cause of death of yves klein",
-#               "Who is the wife of Barack Obama?",
-#               "Who is the president of the United States?",
-#               "When was produced the first Matrix movie?",
-#               "Who made the soundtrack of the The Last Unicorn movie?",
-#               "Who is the author of Le Petit Prince?",
-#               "Which actor voiced the Unicorn in The Last Unicorn?",
-#               "how is called the rabbit in Alice in Wonderland?",
-#               "what city was alex golfis born in",
-#               "which stadium do the wests tigers play in",
-#               "Which nation is Martha Mattox from"
-#              )
-#
-#question_2 = questions_2[6] #"what city was alex golfis born in"#
-#question_2 = "what's akbar tandjung's ethnicity"
-#q_nlp_2 = get_nlp(question_2)
-#q_themes_2 = get_themes(q_nlp_2, top_k=3)
-#q_themes_enhanced_2 = get_enhanced_themes(q_themes_2, top_k=3)
-#q_predicates_2 = get_predicates(q_nlp_2, top_k=3)
-#if q_predicates_2:
-#        if not q_predicates_2[0][1]: q_predicates_2 = get_predicates_online(q_nlp_2, top_k=3)
-#q_focused_parts_2 = get_focused_parts(q_nlp_2)
-#print("q_nlp:", q_nlp_2)
-#print("e\t\te.pos_\te.tag_\te.dep_\te.head\te.children")
-#for e in q_nlp_2:
-#    print(e.text,"\t\t", e.pos_,"\t", e.tag_,"\t", e.dep_,"\t", e.head, "\t", [child for child in e.children])
-#
-#print("\nq_themes:", q_themes_2)
-#print("q_themes_enhanced:",q_themes_enhanced_2)
-#print("q_predicates:", q_predicates_2)
-#print("q_focused_parts:", q_focused_parts_2)
-#
-#graph_2, predicates_dict_2 = build_graph(q_nlp_2, q_themes_2, q_themes_enhanced_2, q_predicates_2, deep_k=40)
-#print(len(graph_2), "nodes and", graph_2.size(), "edges")
-#print(predicates_dict_2)
-##plot_graph(graph_2, "main_graph", "Main_graph_title")
-##answers_2 = find_anwser_from_graph_2(graph, q0_nlp, q0_themes, q_themes_enhanced_2, q_predicates_2, q_focused_parts_2)
-
-
-# In[56]:
-
-
-#plot_graph(graph_2, "test_file_name_graph", "Graph_title")
-
-
-# In[57]:
+# In[59]:
 
 
 def add_compound(nlp_list, themes):
@@ -1616,7 +1985,7 @@ def add_compound(nlp_list, themes):
         return compounded
 
 # TODO: make the predicate search go further in the path list for the !i%2
-def find_paths_keywords(graph, nlp, themes, themes_enhanced, predicates, focused_parts):
+def find_paths_keywords(graph, nlp, themes, themes_enhanced, predicates, focused_parts, keywords_limit=5):
     WH_FILTER = ["WDT", "WP", "WP$", "WRB"]
     VERB_FILTER = ["VERB", "AUX"]
     NOUN_FILTER = ["NOUN","PROPN"]
@@ -1678,8 +2047,11 @@ def find_paths_keywords(graph, nlp, themes, themes_enhanced, predicates, focused
     paths_keywords = []
     [paths_keywords.append(e.lower()) for e in focused_parts_words + in_attention_heads + in_attention_tails + focus_themes + focus_themes_enhanced + focused_parts_words_ids_labeled if e.lower() not in paths_keywords]
     #print(paths_keywords)
-    #paths_keywords = [p for p in itertools.permutations(paths_keywords)]
+    #paths_keywords = [p for p in it.permutations(paths_keywords)]
     #print(paths_keywords)
+    
+    paths_keywords = [p for p in paths_keywords if p and len(p.split(" ")) <= keywords_limit]
+    
     return paths_keywords, alterniative_words, question_anchors
     
     #initial_paths = find_paths_for_themes(graph, themes)
@@ -1693,16 +2065,75 @@ def find_paths_keywords(graph, nlp, themes, themes_enhanced, predicates, focused
 #paths_keywords_2
 
 
-# In[58]:
+# In[60]:
 
 
-def get_paths_keywords_nodes(graph, keywords,threshold=0.9,top_performance=50):
+def get_all_simple_paths_worker(graph, in_mp_queue, out_mp_queue):
+    found_paths = []
+    sentinel = None
+    for source, target in iter(in_mp_queue.get, sentinel):
+        for path in nx.all_simple_paths(graph, source = source, target = target, cutoff = None):
+            found_paths.append(path)
+    out_mp_queue.put(found_paths)
+
+
+# In[61]:
+
+
+def get_keywords_nodes_worker(graph, threshold, in_mp_queue, out_mp_queue):
     keywords_nodes = []
+    sentinel = None
+    for name in iter(in_mp_queue.get, sentinel):
+        #print("2 get_paths_keywords_nodes")
+        nlp_lookup = get_nlp(name)
+        keywords_nodes = [x for x,y in graph.nodes(data=True) if get_nlp(y['name']).similarity(nlp_lookup) >= threshold]
+    
+    out_mp_queue.put(keywords_nodes)
+
+
+# In[62]:
+
+
+def do_nothing(perm):
+    return perm
+    
+def get_paths_keywords_nodes(graph, keywords,threshold=0.9,top_performance=50, cores=mp.cpu_count()):
+    #print("1 get_paths_keywords_nodes")
+    if cores <= 0: cores = 1
+    sentinel = None
+    
+    out_mp_queue = mp.Queue()
+    in_mp_queue = mp.Queue()
+    
     for k in keywords:
-        nlp_lookup = get_nlp(k)
-        keywords_nodes.append([x for x,y in graph.nodes(data=True)
-               if get_nlp(y['name']).similarity(nlp_lookup) >= threshold])
+        in_mp_queue.put(k)
+
+    procs = [mp.Process(target = get_keywords_nodes_worker, args = (graph, threshold, in_mp_queue, out_mp_queue)) for i in range(cores)]
+    
+    keywords_nodes = []
+    
+    for proc in procs:
+        proc.daemon = True
+        proc.start()
+    for proc in procs:    
+        in_mp_queue.put(sentinel)
+    for proc in procs:
+        keywords_nodes.append(out_mp_queue.get())
+    for proc in procs:
+        proc.join()
+        
     keywords_nodes = [k for k in keywords_nodes if k]
+    #print("3 get_paths_keywords_nodes")
+    
+    #print("1 get_paths_keywords_nodes")
+    #keywords_nodes = []
+    #print("len(keywords)",len(keywords))
+    #for k in keywords:
+    #    nlp_lookup = get_nlp(k)
+    #    keywords_nodes.append([x for x,y in graph.nodes(data=True) if get_nlp(y['name']).similarity(nlp_lookup) >= threshold])
+    #    print("2 get_paths_keywords_nodes")
+    #keywords_nodes = [k for k in keywords_nodes if k]
+    #print("3 get_paths_keywords_nodes")
     
     #keywords_nodes [['Q17521117', 'Q17521118', 'Q557214', 'Q421946', 'Q11282976', 'Q4677712', 'Q33999'], ['Q7246', 'Q1307944', 'Q21070472', 'Q18356448', 'Q1863113', 'Q20983877', 'Q226755', 'Q22043340'], ['Q176198', 'Q967268', 'Q17553756', 'Q30060419', 'Q17985004', 'Q16614390', 'Q18647334', 'Q15628943'], ['Q176198', 'Q967268', 'Q17553756', 'Q30060419', 'Q17985004', 'Q16614390', 'Q18647334', 'Q15628943'], []]
     #keywords_nodes[0] ['Q17521117', 'Q17521118', 'Q557214', 'Q421946', 'Q11282976', 'Q4677712', 'Q33999']
@@ -1710,8 +2141,11 @@ def get_paths_keywords_nodes(graph, keywords,threshold=0.9,top_performance=50):
     
     keywords_nodes_per = []
     if keywords_nodes:
+        #print("4 get_paths_keywords_nodes")
         if len(keywords_nodes) > 1:
+            #print("5 get_paths_keywords_nodes")
             for kn_i, kn in enumerate(keywords_nodes):
+                #print("6 get_paths_keywords_nodes")
                 if kn_i + 1 < len(keywords_nodes):
                     if len(kn) * len(keywords_nodes[kn_i+1]) > top_performance:
                         if len(kn) <= int(sqrt(top_performance)):
@@ -1721,23 +2155,64 @@ def get_paths_keywords_nodes(graph, keywords,threshold=0.9,top_performance=50):
                         else:
                             kn = kn[:int(sqrt(top_performance))]
                             keywords_nodes[kn_i+1] = keywords_nodes[kn_i+1][:int(sqrt(top_performance))]
+                #print("7 get_paths_keywords_nodes")
             
-            keywords_nodes_per = [p for p in itertools.permutations(keywords_nodes, 2)]
+            #print("8 get_paths_keywords_nodes")
+            with mp.Pool() as pool:
+                keywords_nodes_per = pool.map(do_nothing, it.permutations(keywords_nodes, 2))
+            #print("9 get_paths_keywords_nodes")
+            
+            keywords_nodes_per = [p for p in keywords_nodes_per]
+            #print(">1 len(keywords_nodes_per",len(keywords_nodes_per),keywords_nodes_per[0])
                             
         else:
             keywords_nodes_per = [(keywords_nodes+keywords_nodes)]
-    
+            #print("<1 len(keywords_nodes_per)",len(keywords_nodes_per),keywords_nodes_per[0])
+            
+ 
+    #print("keywords_nodes_per",keywords_nodes_per)
+    #return 0
     paths_keyword_nodes = []
+    
+
+    targets = []
+    sources = []
     for pkn in keywords_nodes_per:
-        for pkn1 in pkn[0]:
-            for pkn2 in pkn[1]:
-                [paths_keyword_nodes.append(p) for p in nx.all_simple_paths(graph, source=pkn1, target=pkn2) if p not in paths_keyword_nodes]
+        [sources.append(pkn0) for pkn0 in pkn[0] if pkn0 not in sources]
+        [targets.append(pkn1) for pkn1 in pkn[1] if pkn1 not in targets]# and pkn1 not in pkn[0]]
+
+    #print("len(targets)",len(targets))
+    #print("len(sources)",len(sources))
+
+    out_mp_queue = mp.Queue()
+    in_mp_queue = mp.Queue()
+    sentinel = None
+
+    for source, target in it.product(sources, targets):
+        in_mp_queue.put((source, target))
+
+    procs = [mp.Process(target = get_all_simple_paths_worker, args = (graph, in_mp_queue, out_mp_queue)) for i in range(cores)]
+
+    for proc in procs:
+        proc.daemon = True
+        proc.start()
+    for proc in procs:    
+        in_mp_queue.put(sentinel)
+    for proc in procs:
+        paths_keyword_nodes.extend(out_mp_queue.get())
+    for proc in procs:
+        proc.join()
+    
+    paths_keyword_nodes = [p for p in paths_keyword_nodes if p]
+    #paths_keyword_nodes_filtered = []
+    #[paths_keyword_nodes_filtered.append(p) for p in paths_keyword_nodes if p not in paths_keyword_nodes_filtered]
+    #print("len(paths_keyword_nodes)",len(paths_keyword_nodes))
     
     return paths_keyword_nodes
 
-def find_path_nodes_from_graph(graph, keywords, threshold=0.9, thres_inter=0.15, top_performance=50,min_paths=3000):
+def find_path_nodes_from_graph(graph, keywords, threshold=0.9, thres_inter=0.15, top_performance=50,min_paths=3000,cores=mp.cpu_count()):
     #print("current threshold", str(round(threshold, 1)))
-    main_keyword_paths = get_paths_keywords_nodes(graph, keywords[0],threshold=threshold,top_performance=top_performance)
+    main_keyword_paths = get_paths_keywords_nodes(graph, keywords[0],threshold=threshold,top_performance=top_performance,cores=cores)
     alternative_keyword_paths = []
     
     for k_1 in keywords[1]:
@@ -1745,27 +2220,46 @@ def find_path_nodes_from_graph(graph, keywords, threshold=0.9, thres_inter=0.15,
             if k_1==k_0:
                 tmp_keywords = keywords[0].copy()
                 tmp_keywords[i] = keywords[1][k_1][0].text
-                alternative_keyword_paths += get_paths_keywords_nodes(graph, tmp_keywords, threshold=threshold,top_performance=top_performance)
+                alternative_keyword_paths += get_paths_keywords_nodes(graph, tmp_keywords, threshold=threshold,top_performance=top_performance,cores=cores)
     
     keyword_paths = main_keyword_paths+alternative_keyword_paths
+    
+    #print("BEFORE len(keyword_paths)",len(keyword_paths))
+    keyword_paths_filtered=[]
+    [keyword_paths_filtered.append(p) for p in keyword_paths if p not in keyword_paths_filtered]
+    keyword_paths = keyword_paths_filtered
     
     #print("len(keyword_paths)",len(keyword_paths))
     if len(keyword_paths) < min_paths:
         if threshold == 0: return keyword_paths
         threshold -= thres_inter
         if threshold < 0: threshold = 0
-        keyword_paths = find_path_nodes_from_graph(graph, keywords, threshold, thres_inter,top_performance,min_paths)
+        keyword_paths = find_path_nodes_from_graph(graph, keywords, threshold, thres_inter,top_performance,min_paths,cores=cores)
+        
+        keyword_paths_filtered=[]
+        [keyword_paths_filtered.append(p) for p in keyword_paths if p not in keyword_paths_filtered]
+        keyword_paths = keyword_paths_filtered
+        
+    #keyword_paths_filtered = []
+    
+    #print("AFTER len(keyword_paths)",len(keyword_paths))
+    #[keyword_paths_filtered.append(p) for p in keyword_paths if p not in keyword_paths_filtered]
+    
+    
     
     return keyword_paths
 
-#start_time = time.time()
+
 #path_nodes_2 = find_path_nodes_from_graph(graph_2, paths_keywords_2, threshold=0.9, thres_inter=0.15, top_performance=50, min_paths=3000)
 #end_time = time.time()
-#print("Finding path nodes ->\tRunning time is {}s".format(round(end_time-start_time,2))) 
-#print(path_nodes_2)
+
+#start_time = time.time()
+#path_nodes = find_path_nodes_from_graph(graph, paths_keywords, threshold=0.8, thres_inter=0.1, top_performance=graph.size(),min_paths=3000,cores=2)
+#print("--> len(path_nodes):",len(path_nodes))
+#print("Finding path nodes ->\tRunning time is {}s".format(round(time.time()-start_time,2)))
 
 
-# In[59]:
+# In[63]:
 
 
 #node_predicates_names_2 = get_node_predicates_from_path(path_nodes_2)
@@ -1882,7 +2376,7 @@ def paths_nodes_filter(path_nodes, graph):
 #    print(p)
 
 
-# In[60]:
+# In[64]:
 
 
 def w_converter(nlp):
@@ -1913,7 +2407,7 @@ def w_converter(nlp):
     return w_positions, w_names
 
 
-# In[61]:
+# In[65]:
 
 
 def get_entity_similarity(word_id, entity_type, max_reward=2.0):
@@ -1932,11 +2426,19 @@ def get_entity_similarity(word_id, entity_type, max_reward=2.0):
     
     similarities = []
     word_label = get_wd_label(word_id)
-    if word_label == "":
+    if word_label == "" and not is_timestamp(word_id):
         return similarities
-    
+
     word_ents = get_kb_ents(word_label)
-    if word_ents:
+    
+    #if is_timestamp(word_id):
+        #print("is_timestamp")
+        #print("word_ents",word_ents)
+    
+    if is_timestamp(word_id) and entity_type == "date":
+        similarities.append(max_reward)
+        #print("in the condition", word_id, entity_type, similarities)
+    elif word_ents:
         for ent in word_ents:
             if (entity_type in ALL_FILTER and ent.label_ == entity_type):
                 similarities.append(max_reward)
@@ -1946,7 +2448,7 @@ def get_entity_similarity(word_id, entity_type, max_reward=2.0):
                     similarities.append(max_reward)
                 elif entity_type == "person" and ent.label_ in PERSON_FILTER:
                     similarities.append(max_reward)
-                elif entity_type == "date" and ent.label_ in DATE_FILTER:
+                elif entity_type == "date" and (ent.label_ in DATE_FILTER):
                     similarities.append(max_reward)
                 elif entity_type == "cause" and ent.label_ in CAUSE_FILTER:
                     similarities.append(max_reward)
@@ -1965,72 +2467,7 @@ def get_entity_similarity(word_id, entity_type, max_reward=2.0):
     return similarities
 
 
-# In[ ]:
-
-
-
-
-
-# In[62]:
-
-
-#test_question = "Of what nationality is Ken McGoogan"#"Which is the nation of Martha Mattox"#"Who voiced the Unicorn in The Last Unicorn?"
-#
-#test_verbose = True
-#test_deep_k = 30
-#test_deep_k_step = 20
-#
-#test_q_nlp = get_nlp(test_question)
-#if test_verbose: print("-> test_q_nlp:",test_q_nlp)
-#test_q_themes = get_themes(test_q_nlp, top_k=3)
-#if test_verbose: print("-> test_q_themes:",test_q_themes)
-#test_q_themes_enhanced = get_enhanced_themes(test_q_themes, top_k=1, aggressive=False)
-#if test_verbose: print("-> test_q_themes_enhanced:",test_q_themes_enhanced)
-#test_q_predicates = get_predicates(test_q_nlp, test_q_themes, top_k=0)
-#if test_q_predicates:
-#    test_has_predicates = False
-#    for test_qp in test_q_predicates:
-#        if test_qp[1]:
-#            test_has_predicates = True
-#    if not test_has_predicates: test_q_predicates = get_predicates_online(test_q_nlp, top_k=2, aggressive=False)
-#else:
-#    test_q_predicates = get_predicates_online(test_q_nlp, top_k=2, aggressive=True)    
-#if test_verbose: print("-> test_q_predicates:",test_q_predicates)
-#test_q_focused_parts = get_focused_parts(test_q_nlp, test_q_themes, top_k=3)
-#if test_verbose: print("-> test_q_focused_parts:",test_q_focused_parts)
-#if test_verbose: print("-> Building the graph with test_k_deep",str(test_deep_k),"... (could be long)")
-#if test_deep_k<=10:
-#    test_deep_k = 10
-#    test_graph, test_predicates_dict = build_graph(test_q_nlp, test_q_themes, test_q_themes_enhanced, test_q_predicates, deep_k=test_deep_k)
-#else:
-#    for k in range(10, test_deep_k, test_deep_k_step):
-#        test_graph, test_predicates_dict = build_graph(test_q_nlp, test_q_themes, test_q_themes_enhanced, test_q_predicates, deep_k=test_deep_k)
-#        if test_graph.size() > 1000 or len(test_graph) > 1000 or test_deep_k<=10:
-#            break
-#        elif test_graph.size() > 500 or len(test_graph) > 500:
-#            test_deep_k -= test_deep_k_step
-#            if test_verbose: print("---> Rebuilding the graph with k_deep",str(test_deep_k), "... Previously:",len(test_graph), "nodes or", test_graph.size(), "edges was above the limit...")
-#        else: break
-#if test_verbose: print("--> ",len(test_graph), "nodes and", test_graph.size(), "edges")
-#if test_graph.size() > 510 or len(test_graph) > 510:
-#    if test_verbose: print("Stopping the computing here, too computational.")
-#if test_verbose: print("-> test_predicates_dict:",test_predicates_dict)
-#test_paths_keywords = find_paths_keywords(test_graph, test_q_nlp, test_q_themes, test_q_themes_enhanced, test_q_predicates, test_q_focused_parts)
-#if test_verbose: print("-> test_paths_keywords:",test_paths_keywords)
-#if test_verbose: print("-> Computing possible paths... (could be long)")
-#test_path_nodes = find_path_nodes_from_graph(test_graph, test_paths_keywords, threshold=0.8, thres_inter=0.1, top_performance=test_graph.size(),min_paths=3000)
-#if test_verbose: print("--> len(path_nodes):",len(test_path_nodes))
-#if len(test_path_nodes) < 20000:
-#    if test_verbose: print("-> Filtering paths... (could be long)")
-#    test_paths_nodes_filtered = paths_nodes_filter(test_path_nodes, test_graph)
-#    if test_verbose: 
-#        print("--> len(paths_nodes_filtered):",len(test_paths_nodes_filtered))
-#else: 
-#    if test_verbose: print("--> Skipping paths filtering... (too much paths)")
-#    test_paths_nodes_filtered = test_path_nodes
-
-
-# In[63]:
+# In[66]:
 
 
 def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, threshold=0.5, max_reward=2.0):#, themes, themes_enhanced):
@@ -2104,7 +2541,9 @@ def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, th
     [main_predicate_names.append(p) for p in predicate_names+[get_nlp(p[0].text) for p in list(paths_keywords[1].values())] if p not in main_predicate_names]
     #print("paths_keywords[1]",paths_keywords[1])
     #print("main_predicate_names",main_predicate_names)
-    
+    #
+    nlp_time = get_nlp("time")
+    nlp_date = get_nlp("date")
     #return 0
     for p in filtered_paths:
         p_len = len(p)
@@ -2113,7 +2552,16 @@ def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, th
                 if main_predicate_ids:
                     if e in main_predicate_ids:
                         if e not in [ap[0] for ap in anchors_predicates]:
-                            anchors_predicates.append((e, 1.0))
+                            if "date" in w_names_only:
+                                time_similarity = get_similarity_by_words(get_nlp(get_wd_label(e)),nlp_time)
+                                date_similarity = get_similarity_by_words(get_nlp(get_wd_label(e)),nlp_date)
+                                #print("main_predicate_ids", e, "time_similarity",time_similarity)
+                                #print("main_predicate_ids", e, "date_similarity",date_similarity)
+                                if time_similarity > date_similarity:
+                                    anchors_predicates.append((e, time_similarity))
+                                else: anchors_predicates.append((e, date_similarity))
+                            else:
+                                anchors_predicates.append((e, 1.0))
                     elif e not in [ap[0] for ap in anchors_predicates]:
                         stat_count = 0
                         stat_current = 0
@@ -2123,6 +2571,16 @@ def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, th
                         for pi in main_predicate_ids:
                             stat_current += get_similarity_by_words(get_nlp(get_wd_label(e)),get_nlp(get_wd_label(pi)))
                             stat_count += 1
+                        if "date" in w_names_only:
+                            time_similarity = get_similarity_by_words(get_nlp(get_wd_label(e)),nlp_time)
+                            date_similarity = get_similarity_by_words(get_nlp(get_wd_label(e)),nlp_date)
+                            if time_similarity > 0.7 or date_similarity > 0.7:
+                                if stat_count > 1: 
+                                    stat_count -= 1
+                                else: stat_count += 1
+                                if time_similarity > date_similarity:
+                                    anchors_predicates.append((e, time_similarity))
+                                else: anchors_predicates.append((e, date_similarity))
                         anchors_predicates.append((e, stat_current/stat_count))
                         
                 elif e not in [ap[0] for ap in anchors_predicates]:
@@ -2131,6 +2589,16 @@ def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, th
                     for af in anchors_focuses:
                         stat_current += get_similarity_by_words(get_nlp(get_wd_label(e)),get_nlp(af))
                         stat_count += 1
+                    if "date" in w_names_only:
+                        time_similarity = get_similarity_by_words(get_nlp(get_wd_label(e)),nlp_time)
+                        date_similarity = get_similarity_by_words(get_nlp(get_wd_label(e)),nlp_date)
+                        if time_similarity > threshold or date_similarity > threshold:
+                            if stat_count > 1:
+                                stat_count -= 1
+                            else: stat_count += 1
+                            if time_similarity > date_similarity:
+                                anchors_predicates.append((e, time_similarity))
+                            else: anchors_predicates.append((e, time_similarity))
                     anchors_predicates.append((e, stat_current/stat_count))
             
     
@@ -2149,6 +2617,8 @@ def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, th
     anchors_predicates_filtered = []
     [anchors_predicates_filtered.append(ap) for ap in anchors_predicates if ap not in anchors_predicates_filtered]
     
+    #print("\anchors_predicates_filtered",anchors_predicates_filtered)
+    
     #anchors_predicates = [a for a in sorted(anchors_predicates_filtered, key=lambda x: x[-1], reverse=True) if a[1] > threshold]
     
     for thres in [e/100 for e in reversed(range(10, int(threshold*100)+10, 10))]:
@@ -2156,6 +2626,7 @@ def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, th
         anchors_predicates = [a for a in sorted(anchors_predicates_filtered, key=lambda x: x[-1], reverse=True) if a[1] > thres]
         if anchors_predicates:
             break
+            
     
     #print("len(anchors_predicates sorted)",len(anchors_predicates))
     #print("anchors_predicates sorted",anchors_predicates)
@@ -2186,6 +2657,7 @@ def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, th
     
     hypothesises_tuples = []
     for ap in anchors_predicates:
+        #print("ap",ap)
         for fp in filtered_paths:
             #if "Q4985" in fp:
             #    print("Q4985 in fp",fp, ap)
@@ -2220,6 +2692,7 @@ def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, th
     hypothesises_all = []
     hypothesises_tuples_len = len(hypothesises_tuples)
     for ht in hypothesises_tuples:
+        #print("ht",ht)
         if ht[1] in [a[0] for a in anchors_predicates]:
             for i_af, af in enumerate(anchors_focuses):
                 hypo_sum = 0
@@ -2237,25 +2710,37 @@ def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, th
                 #    for es in get_entity_similarity(ht[0], wn[1], max_reward=max_reward):
                 #        hypo_sum += es
                 
-                if (nlp_af.text.lower() != nlp_ht2.text.lower() 
+                if (
+                    nlp_af.text.lower() != nlp_ht2.text.lower() 
                     and af_lemma != nlp_ht2[0].text.lower()
                     and nlp_af.text.lower() != ht2_lemma
                     and af_lemma != ht2_lemma
                    ):
-                    hypo_sum += get_similarity_by_words(nlp_ht2, nlp_af)
+                    
+                    if "date" in w_names_only:
+                        if is_timestamp(ht[0]):
+                            for es in get_entity_similarity(ht[0], "date", max_reward=max_reward):
+                                hypo_sum += es
+                                #print("if date hypo_sum",ht[0], "date",ht[0], es, hypo_sum)
+                        
+                        else: hypo_sum += get_similarity_by_words(nlp_ht2, nlp_af)
+                    else: hypo_sum += get_similarity_by_words(nlp_ht2, nlp_af)
                     
                     if i_af in w_positions:
                         for wn in w_names:
                             if i_af == wn[0]:
                                 for es in get_entity_similarity(ht[0], wn[1], max_reward=max_reward):
-                                    #if ht[0] == "Q4985": print("before Q4985:",i_af, es,ht[0], wn[1], hypo_sum)
                                     hypo_sum += es
-                                    #if ht[0] == "Q4985": print("after Q4985:",i_af, es,ht[0], wn[1], hypo_sum)
+                                    #print("if i_af hypo_sum","ht[0], wn[1], es",ht[0], wn[1], es,hypo_sum)
+                                    
+                    
                                                        
                     for ap in anchors_predicates:
                         if ap[0] == ht[1]:
-                            ht0_label = get_wd_label(ht[0]).lower()
-                            ht2_label = get_wd_label(ht[2]).lower()
+                            if is_timestamp(ht[0]): ht0_label = ht[0]
+                            else: ht0_label = get_wd_label(ht[0]).lower()
+                            if is_timestamp(ht[2]): ht2_label = ht[2]
+                            else: ht2_label = get_wd_label(ht[2]).lower()
                             
                             ht0_sum = 0
                             ht2_sum = 0
@@ -2263,8 +2748,10 @@ def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, th
                             for wn in w_names_only:
                                 for es in get_entity_similarity(ht[0], wn, max_reward=max_reward):
                                     ht0_sum += es
+                                    #print("w_names_only ht0_sum ht[0], wn, es",ht[0], wn, es, ht0_sum)
                                 for es in get_entity_similarity(ht[2], wn, max_reward=max_reward):
                                     ht2_sum += es
+                                    #print("w_names_only ht2_sum ht[2], wn, es",ht[2], wn, es, ht2_sum)
                                     
                             for tk in theme_keywords:
                                 if ht0_label == tk.text.lower() and ht[1] in main_predicate_ids:
@@ -2273,25 +2760,40 @@ def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, th
                                         for es in get_entity_similarity(ht[2], wn, max_reward=max_reward*2):
                                             #print("ht0_sum before",ht0_sum)
                                             ht0_sum += es
+                                            #print("theme_keywords ht0_sum ht[2], wn, es",ht[2], wn, es, ht0_sum)
                                             #print("ht0_label",ht2_label,es, ht0_sum, ht)
                                 if ht2_label == tk.text.lower() and ht[1] in main_predicate_ids:
                                     for wn in w_names_only:
                                         for es in get_entity_similarity(ht[0], wn, max_reward=max_reward*2):
                                             #print("ht2_sum before",ht0_sum)
                                             ht2_sum += es
+                                            #print("theme_keywords ht2_sum ht[0], wn, es",ht[0], wn, es, ht2_sum)
                                             #print("ht2_label",ht0_label,es, ht2_sum, ht)
                                     
                             
-                            if ht2_label in keywords_names and ht0_label not in keywords_names:
+                            if is_timestamp(ht0_label) and ht2_label in keywords_names:
+                                hypo_sum += ht0_sum
+                                #print("is_timestamp(ht0_label) hypo_sum", hypo_sum)
+                            elif is_timestamp(ht2_label) and ht0_label in keywords_names:
                                 hypo_sum += ht2_sum
+                                #print("is_timestamp(ht2_label) hypo_sum", hypo_sum)
+                            elif ht2_label in keywords_names and ht0_label not in keywords_names:
+                                hypo_sum += ht2_sum
+                                #print("ht2_label hypo_sum in keywords_names", hypo_sum)
                             elif ht0_label in keywords_names and ht2_label not in keywords_names:
                                 hypo_sum += ht0_sum
+                                #print("ht0_label hypo_sum in keywords_names", hypo_sum)
                             else:
                                 hypo_sum += ht0_sum
                                 hypo_sum += ht2_sum
+                                #print("else in keywords_names hypo_sum", hypo_sum)
                                 
-                            
+                                
+                            #print("hypo_sum",hypo_sum)
+                            #print("ap[1]",ap[1])
                             hypo_sum *= ap[1]
+                            
+                            #print("ht[0], ht[2], hypo_sum",ht[0], ht[2], hypo_sum)
                             
                             #if get_wd_label(ht[0]).lower() in keywords_names:
                             #    if not i_af in w_positions: 
@@ -2325,12 +2827,33 @@ def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, th
                             #hypo_sum -= ap[1]
                             #hypo_sum += hypo_sum/ap[1]
                     
-                    if get_wd_label(ht[0]).lower() in anchors_focuses: 
+                    #print("ht[0]",ht[0])
+                    #print("ht[2]",ht[2])
+                    
+                    if (is_timestamp(ht[0]) 
+                        and not is_timestamp(ht[2]) 
+                        and get_wd_label(ht[2]).lower() in anchors_focuses):
+                        #print("is_timestamp(ht[0]")
+                        hypo = ht[0]
+                    
+                    elif (is_timestamp(ht[2]) 
+                        and not is_timestamp(ht[0]) 
+                        and get_wd_label(ht[0]).lower() in anchors_focuses):
+                        #print("is_timestamp(ht[2]")
+                        hypo = ht[2]
+                    
+                    elif is_timestamp(ht[0]) and is_timestamp(ht[2]): break
+                    
+                    elif get_wd_label(ht[0]).lower() in anchors_focuses:
+                        #print("get_wd_label(ht[0]).lower()",get_wd_label(ht[0]).lower())
                         if not get_wd_label(ht[2]).lower() in anchors_focuses:
                             hypo = ht[2]
                         if get_wd_label(ht[2]).lower() in anchors_focuses:
                             break
+                        
                     elif not get_wd_label(ht[0]).lower() in anchors_focuses:
+                        #print("get_wd_label(ht[2]).lower()",get_wd_label(ht[2]).lower())
+                        
                         if get_wd_label(ht[2]).lower() in anchors_focuses:
                             hypo = ht[0]
                         if not get_wd_label(ht[2]).lower() in anchors_focuses:
@@ -2344,10 +2867,12 @@ def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, th
                             
                             #if "Q4985" in ht: print("Q4985 ALONE hypo and sum:", ht[0], hypo_sum)
                             hypo = ht[2]
+
                     else:
                         #print("BREAK", ht)
                         break
                     
+                    #print("hypothesises",hypothesises)
                     #if "Q4985" in ht:
                     #    print("Q4985 hypo and sum:", hypo, hypo_sum)
                     
@@ -2358,7 +2883,8 @@ def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, th
                             for i, h in enumerate(hypothesises):
                                 if hypo == h[0]: hypothesises[i] = [hypo, hypo_sum+hypothesises[i][1]]
                         else: hypothesises.append([hypo, hypo_sum])
-                            
+    
+    #print("len(hypothesises_all)",len(hypothesises_all))
     for i_h, h in enumerate(hypothesises):
         h_sum = hypothesises_all.count(h[0])
         #print("h_sum",h_sum)
@@ -2382,8 +2908,11 @@ def get_hypothesises(nlp, predicates, themes, paths_keywords, filtered_paths, th
 #if test_verbose: print("\n\n--> test_hypothesises:",test_hypothesises)
 
 
-# In[64]:
+# In[67]:
 
+
+# TODO / REDO
+# is_wd_entity not taking care of timestamps
 
 def list_by_n(l, i):
     list_n = []
@@ -2416,6 +2945,7 @@ def match_hypothesises(graph, question, themes, predicates, hypothesises, paths,
             if w_names[i_wp][1] and wp<len(p):
                 for es in get_entity_similarity(p[wp], w_names[i_wp][1], max_reward=max_reward):
                     counter += es
+                    print("p[wp], w_names[i_wp][1], es",p[wp], w_names[i_wp][1], es)
                 
         for hypo in hypothesises:
             if hypo[0] in p:
@@ -2701,7 +3231,7 @@ def match_hypothesises(graph, question, themes, predicates, hypothesises, paths,
 #print(golden_paths_2)
 
 
-# In[86]:
+# In[68]:
 
 
 ## questions = ("what was the cause of death of yves klein",
@@ -2717,13 +3247,13 @@ def match_hypothesises(graph, question, themes, predicates, hypothesises, paths,
 #def print_running_time(start_time, end_time=time.time()):
 #    print("->\tRunning time is {}s".format(round(end_time-start_time,2)))
 
-def answer_question(question, verbose=False, aggressive=False, looped=False, deep_k=30, deep_k_step=20, timer=False, g_paths=False):
+def answer_question(question, verbose=False, aggressive=False, looped=False, deep_k=5, deep_k_step=1, timer=False, g_paths=False, get_graph=False, cores=mp.cpu_count()):
     if verbose: start_time = time.time()
     if timer: timer_time = time.time()
     if verbose: print("Auto correcting question:",question)
     q_nlp = get_nlp(question, autocorrect=True)
     if verbose: print("-> q_nlp:",q_nlp)
-    q_themes = get_themes(q_nlp, top_k=2)
+    q_themes = get_themes(q_nlp, top_k=2, online=True)
     if verbose: print("-> q_themes:",q_themes)
     q_themes_enhanced = get_enhanced_themes(q_themes, top_k=1, aggressive=aggressive)
     if verbose: print("-> q_themes_enhanced:",q_themes_enhanced)
@@ -2756,25 +3286,35 @@ def answer_question(question, verbose=False, aggressive=False, looped=False, dee
     q_focused_parts = get_focused_parts(q_nlp, q_themes, top_k=2)
     if verbose: print("-> q_focused_parts:",q_focused_parts)
     if verbose: print("-> Building the graph with k_deep",str(deep_k),"... (could be long)")
-    if deep_k<=10:
-        deep_k = 10
-        graph, predicates_dict = build_graph(q_nlp, q_themes, q_themes_enhanced, q_predicates, deep_k=deep_k)
+    if deep_k<1:
+        deep_k = 1
+        graph, predicates_dict = build_graph(q_nlp, q_themes, q_themes_enhanced, q_predicates, deep_k=deep_k, cores=cores)
         if timer: 
             print("->\tRunning time is {}s".format(round(time.time()-timer_time,2)))
             timer_time = time.time()
     else:
-        for k in range(10, deep_k, deep_k_step):
-            graph, predicates_dict = build_graph(q_nlp, q_themes, q_themes_enhanced, q_predicates, deep_k=deep_k)
+        for k in range(1, deep_k, deep_k_step):
+            graph, predicates_dict = build_graph(q_nlp, q_themes, q_themes_enhanced, q_predicates, deep_k=deep_k, cores=cores)
             if timer: 
                 print("->\tRunning time is {}s".format(round(time.time()-timer_time,2)))
                 timer_time = time.time()
-            if graph.size() > 1000 or len(graph) > 1000 or deep_k<=10:
-                break
-            elif graph.size() > 500 or len(graph) > 500:
+            break # TODO TBD if auto scaling is meaningful    
+            #if graph.size() > 1000 or len(graph) > 1000 or deep_k<=10:
+            #    break
+            if graph.size() > 500 or len(graph) > 500:
                 deep_k -= deep_k_step
                 if verbose: print("---> Rebuilding the graph with k_deep",str(deep_k), "... Previously:",len(graph), "nodes or", graph.size(), "edges was above the limit...")
             else: break
     if verbose: print("--> ",len(graph), "nodes and", graph.size(), "edges")
+    if verbose: print("--> Removing meaningless subgraphs")
+    q_theme_names = [q[0].text for q in q_themes[0]]
+    q_theme_enhanced_names = [q[0] for q in q_themes_enhanced]
+    graph = filter_graph_by_names(graph, q_theme_names+q_theme_enhanced_names, entities=True, predicates=False)
+    if verbose: print("--> New graph of:",len(graph), "nodes and", graph.size(), "edges")
+    if get_graph: 
+        plot_graph(graph, "file_name_graph", "Graph_title")
+        return graph
+    
     #if graph.size() > 510 or len(graph) > 510:
     #    if verbose: print("Stopping the computing here, too computational.")
     #    return False
@@ -2783,7 +3323,13 @@ def answer_question(question, verbose=False, aggressive=False, looped=False, dee
     if verbose: print("-> paths_keywords:",paths_keywords)
     if timer: timer_time = time.time()
     if verbose: print("-> Computing possible paths... (could be long)")
-    path_nodes = find_path_nodes_from_graph(graph, paths_keywords, threshold=0.8, thres_inter=0.1, top_performance=graph.size(),min_paths=3000)
+    #if graph.size() < 500:
+    #    top_perf = graph.size()
+    #else:
+    #    top_perf = 500
+    path_nodes = find_path_nodes_from_graph(graph, paths_keywords, threshold=0.8, thres_inter=0.1, top_performance=graph.size(), min_paths=100, cores=cores)
+    #for p in path_nodes:
+    #    print("path_nodes",path_nodes)
     if verbose: print("--> len(path_nodes):",len(path_nodes))
     if timer: 
         print("->\tRunning time is {}s".format(round(time.time()-timer_time,2)))
@@ -2799,6 +3345,8 @@ def answer_question(question, verbose=False, aggressive=False, looped=False, dee
     else: 
         if verbose: print("--> Skipping paths filtering... (too much paths)")
         paths_nodes_filtered = path_nodes
+    #for p in paths_nodes_filtered:
+    #    print("paths_nodes_filtered",paths_nodes_filtered)
     if verbose: print("-> Computing hypothesises...")
     hypothesises = get_hypothesises(q_nlp, q_predicates, q_themes, paths_keywords, paths_nodes_filtered, threshold=0.5, max_reward=2.0) 
     if verbose: print("--> hypothesises:",hypothesises)
@@ -2884,17 +3432,40 @@ def answer_question(question, verbose=False, aggressive=False, looped=False, dee
 #answer = answer_question("Name a person who died from bleeding.", verbose=True, timer=True) # 117.35s
 #answer = answer_question("What is the name of the person who created Saved by the Bell?", verbose=True, timer=True)
 #answer = answer_question("of what nationality is ken mcgoogan", verbose=True, timer=True) #works 51.39s
-
-#answer = answer_question("Which actor voiced the Unicorn in The Last Unicorn?", verbose=True, timer=True, g_paths=False)
+#
+#answer = answer_question("What is a tv action show?", verbose=True, timer=True, g_paths=False)
+##answer = answer_question("who published neo contra", verbose=True, timer=True, g_paths=False)
+##answer = answer_question("When was the publication date of the movie Grease?", verbose=True, timer=True, g_paths=False)
+##answer = answer_question("When did the movie Grease come out?", verbose=True, timer=True, g_paths=False)
+#answer = answer_question("whats the name of the organization that was founded by  frei otto", verbose=True, timer=True, g_paths=False)
+#answer = answer_question("where was johannes messenius born", verbose=True, timer=True, g_paths=False)
+#answer = answer_question("What is a type of gameplay available to gamers playing custom robo v2", verbose=True, timer=True, g_paths=False)
+#
 #if answer:
 #    print("Answer:",get_wd_label(answer[0][0]), "("+str(answer[0][0])+")")
-#    print("Paths:",[[get_wd_label(e) for e in row] for row in answer[1:]])
+#    #print("Paths:",[[get_wd_label(e) for e in row] for row in answer[1:]])
 
 
-# In[88]:
+#graph = answer_question("When did the movie Grease come out?", verbose=True, timer=True, g_paths=False, get_graph=True)
+
+#graph = answer_question("When was the publication date of the movie Grease?", verbose=True, timer=True, g_paths=False)
+
+#graph = answer_question("Which actor voiced the Unicorn in The Last Unicorn?", verbose=True, timer=True, g_paths=False, get_graph=True)
+
+#graph = answer_question("whats the name of the organization that was founded by  frei otto", verbose=True, timer=True, g_paths=False, get_graph=True)
+
+
+# In[69]:
+
+
+#print("test")
+
+
+# In[70]:
 
 
 #questions = [
+#    "whats the name of the organization that was founded by  frei otto",
 #    "What is the name of the writer of The Secret Garden?",
 #    "Where did roger marquis die",
 #    "Which genre of album is harder.....faster?",
@@ -2912,14 +3483,14 @@ def answer_question(question, verbose=False, aggressive=False, looped=False, dee
 #            ]
 #
 #for i_q, question in enumerate(questions):
-#    if i_q >= 12:
+#    if i_q >= 0:
 #        answer = answer_question(question, verbose=True, timer=True, g_paths=False)
 #        if answer:
 #            print("Answer:",get_wd_label(answer[0][0]), "("+str(answer[0][0])+")\n")
-#    
+    
 
 
-# In[67]:
+# In[71]:
 
 
 #to_translate = ['Q13133', 'P26', 'Q76', 'P31', 'Q5', 'P31', 'Q24039104', 'P21', 'Q6581072', 'P1552', 'Q188830', 'P26', 'Q18531596']
@@ -2943,13 +3514,13 @@ def answer_question(question, verbose=False, aggressive=False, looped=False, dee
 #print("-->"," [MASK] ".join([e for e in filtered_by_elements]))
 
 
-# In[68]:
+# In[72]:
 
 
 #graph_2.has_node("Q13133")
 
 
-# In[69]:
+# In[73]:
 
 
 #get_similarity_by_words(get_nlp("mia farrow"), get_nlp("farrow mia")) #1.000000077374981
@@ -2963,7 +3534,7 @@ def answer_question(question, verbose=False, aggressive=False, looped=False, dee
 #get_similarity_by_words(get_nlp("voice actor"),get_nlp("protagonist")) #0.4688377364169893
 
 
-# In[70]:
+# In[74]:
 
 
 #subgraphs = [graph.subgraph(c) for c in nx.connected_components(graph)]
@@ -2972,39 +3543,39 @@ def answer_question(question, verbose=False, aggressive=False, looped=False, dee
 #len(subgraphs[0].nodes)
 
 
-# In[71]:
+# In[75]:
 
 
 #for path in nx.all_simple_paths(graph, source="Q176198", target="Q202725"):
 #    print(path)
 
 
-# In[72]:
+# In[76]:
 
 
 #nx.shortest_path(graph, source="Q176198", target="Q202725")
 
 
-# In[73]:
+# In[77]:
 
 
 #nlp_lookup_test = get_nlp("klein yves")
 #[y['name'] for x,y in graph.nodes(data=True) if get_nlp(y['name']).similarity(nlp_lookup_test) >= 0.9]
 
 
-# In[74]:
+# In[78]:
 
 
 #list(nx.dfs_labeled_edges(graph, source=get_themes(q0_nlp, top_k=3)[0][0][1][0], depth_limit=4))[0]
 
 
-# In[75]:
+# In[79]:
 
 
 #plot_graph(graph_2, "test_file_name_graph", "Graph_title")
 
 
-# In[76]:
+# In[80]:
 
 
 #nlp_lookup_test = get_nlp("klein yves")
@@ -3012,31 +3583,31 @@ def answer_question(question, verbose=False, aggressive=False, looped=False, dee
 #[y['name'] for x,y in graph_2.nodes(data=True) if y['type'] == 'predicate']
 
 
-# In[77]:
+# In[81]:
 
 
 #get_nlp(get_wd_label("Q13133")).similarity(get_nlp("person"))
 
 
-# In[78]:
+# In[82]:
 
 
 #get_similarity_by_words(get_nlp("PERSON"),get_nlp("person"))
 
 
-# In[79]:
+# In[83]:
 
 
 #get_similarity_by_words(get_nlp("GPE"),get_nlp("location"))
 
 
-# In[80]:
+# In[84]:
 
 
-#get_most_similar("Michelle Obama", topn=5)
+#get_most_similar("Michelle Obama", top_k=5)
 
 
-# In[81]:
+# In[85]:
 
 
 #doc_ents_tmp = get_kb_ents("Michelle Obama")
@@ -3058,7 +3629,7 @@ def answer_question(question, verbose=False, aggressive=False, looped=False, dee
 
 
 
-# In[82]:
+# In[86]:
 
 
 #nlp.get_vector("Q42")
