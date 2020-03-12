@@ -4802,7 +4802,7 @@ def convert_to_literal(to_literal):
         return to_literal
 
 
-# In[78]:
+# In[170]:
 
 
 def is_binary_question(nlp_question):
@@ -4810,17 +4810,29 @@ def is_binary_question(nlp_question):
     #print(nlp_question[0],nlp_question[0].lemma_,nlp_question[0].pos_,nlp_question[0].tag_)
     if len(nlp_question)<=1:
         return False
+    elif nlp_question[0].lemma_ in BINARY_VERBS and "or" in [w.lemma_ for w in nlp_question]:
+        return False
     elif nlp_question[0].lemma_ in BINARY_VERBS:
         return True
     elif nlp_question[0].lower_ == "not" and nlp_question[1].lemma_ in BINARY_VERBS:
         return True
     else: return False
 
-#nlp_question_test = get_nlp("Not")
+#nlp_question_test = get_nlp("Is this and that?")
 #is_binary_question(nlp_question_test)
 
 
-# In[160]:
+# In[ ]:
+
+
+# TODO
+# is this or this?
+# is this and that?
+def is_choice_question(nlp_question):
+    return False
+
+
+# In[166]:
 
 
 ## questions = ("what was the cause of death of yves klein",
@@ -5014,7 +5026,7 @@ def answer_question(question, verbose=False, aggressive=False, looped=False,
     binary_question = is_binary_question(q_nlp)
     q_themes = get_themes(q_nlp, question, top_k=2, online=True)
     if verbose: print("-> q_themes:",q_themes)
-    q_themes_enhanced = get_enhanced_themes(q_themes, top_k=1, aggressive=True)
+    q_themes_enhanced = get_enhanced_themes(q_themes, top_k=1, title_limit=4, aggressive=True)
     if verbose: print("-> q_themes_enhanced:",q_themes_enhanced)
     if verbose: print("--> Calculating predicates... (could be long.. depends on uncached unpure predicates)")
     q_predicates_db = get_predicates(q_nlp, q_themes, top_k=0)
@@ -5343,8 +5355,14 @@ def answer_question(question, verbose=False, aggressive=False, looped=False,
                         #print("q_themes[0]",q_themes[0],type(q_themes[0][0]))
                         #print("q_themes[0][0]",q_themes[0][0])
                         #print("q_themes[0][0][1]",q_themes[0][0][1])
-                        node_name_id = [ti[1] for ti in q_themes[0] if ti[0].text==node_name]
-                        context_graph = get_context_graph([q_themes[0][0][1]], graph, q_themes,question=question,previous_graph=previous_graph,in_context=in_context, top_k=k_deep_context_graph)
+                        node_name_id = sum([ti[1] for ti in q_themes[0] if ti[0].text==node_name],[])
+                        print("node_name_id",node_name_id)
+                        if q_themes[0]:
+                            context_graph = get_context_graph(node_name_id, graph, q_themes,question=question,previous_graph=previous_graph,in_context=in_context, top_k=k_deep_context_graph)
+                        elif q_themes_enhanced[0]:
+                            context_graph = get_context_graph(node_name_id, graph, q_themes_enhanced,question=question,previous_graph=previous_graph,in_context=in_context, top_k=k_deep_context_graph)
+                        else:
+                            context_graph = graph
                         answer = [["yes"],[]]
                         if show_graph:
                             if verbose: print("---> Ploting the context graph (PLOT 0)")
@@ -5565,9 +5583,12 @@ def answer_question(question, verbose=False, aggressive=False, looped=False,
 #answer_1,context_graph_1 = answer_question("who is the writer of chance and necessity", verbose=True, timer=True, show_graph=True)
 #answer_1,context_graph_1 = answer_question("in which conflict did frederick benteen participate in", verbose=True, timer=True, show_graph=True)
 #
+#answer_1,context_graph_1 = answer_question("is g.o.r.a. fantasy or science fiction", verbose=True, timer=True, show_graph=True)
+#
 #if answer_1:
 #    print("Answer:",convert_to_literal(get_wd_label(answer_1[0][0])), "("+str(answer_1[0][0])+")\n")
 ###    #print("Paths:",[[get_wd_label(e) for e in row] for row in answer[1:]])
+
 
 
 #answer,context_graph = answer_question("When did the movie Grease come out?", verbose=True, timer=True, g_paths=False, show_graph=True)
@@ -5586,7 +5607,7 @@ def answer_question(question, verbose=False, aggressive=False, looped=False,
 #answer_2,context_graph_2 = answer_question("When did they marry?", previous_answer=answer_1, previous_graph=context_graph_1, verbose=True, timer=True, show_graph=True)
 
 
-# In[161]:
+# In[165]:
 
 
 #conversation_questions = [
@@ -5602,7 +5623,7 @@ def answer_question(question, verbose=False, aggressive=False, looped=False,
 #                                               verbose=True, timer=True, show_graph=True)
 
 
-# In[162]:
+# In[ ]:
 
 
 #plot_graph(context_graph, "file_name_context_graph", "Context_Graph_title")

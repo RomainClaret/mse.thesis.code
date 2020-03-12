@@ -1,0 +1,17 @@
+{
+	"tagMe_token": 								"800606f2-cebf-494f-a655-ee183b6ba20f-843339462",
+	"hyperparameters_frontier_detection": 		[0.6, 0.3, 0.1],
+	"hyperparameters_answer_detection": 		[0.9, 0.1],
+	"number_of_frontier_nodes":					3,
+	"domain":									"ALL",
+	"domain_options":							["books", "movies", "music", "soccer", "tv_series", "ALL"],
+	"conversations_path":						"data/convex/train_set/train_set_ALL.json",
+	"wikidata_dump_path":						"data/kb/wikidata2018_09_11.hdt",
+	"wikidata_top_k_limit":						3,
+	"save_cache":								true,
+	"cache_path":								"data/convex/cache_empty",
+	"stopwords_path":							"data/convex/stopwords.txt",
+	"identifier_predicates_path":				"data/convex/identifier_predicates.json",
+	"telegram_chat_id":							18369237,
+	"telegram_bot_token":						"1047656481:AAEDKO5iey_TKr3nxW40PgZ6s0aY7WMnS7U"
+}
